@@ -1,0 +1,20 @@
+{
+  "device_name": "NVIDIA H100 80GB HBM3 (SXM5)",
+  "architecture": "Hopper",
+  "compute_capability": "9.0",
+  "num_sms": 132,
+  "memory_capacity_gb": 80.0,
+  "memory_bus_width_bits": 5120,
+  "memory_bandwidth_gb_s": 3350.0,
+  "compute_tflops": {
+    "fp32": 67.0,
+    "fp16": 989.0,
+    "bf16": 989.0,
+    "fp8": 1979.0
+  },
+  "interconnect": {
+    "type": "NVLink 4",
+    "bidirectional_bandwidth_gb_s": 900.0,
+    "unidirectional_bandwidth_gb_s": 450.0
+  }
+}

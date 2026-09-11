@@ -1,0 +1,20 @@
+{
+  "device_name": "NVIDIA GeForce RTX 4090",
+  "architecture": "Ada Lovelace",
+  "compute_capability": "8.9",
+  "num_sms": 128,
+  "memory_capacity_gb": 24.0,
+  "memory_bus_width_bits": 384,
+  "memory_bandwidth_gb_s": 1008.0,
+  "compute_tflops": {
+    "fp32": 82.6,
+    "fp16": 165.2,
+    "bf16": 165.2,
+    "fp8": 330.4
+  },
+  "interconnect": {
+    "type": "PCIe Gen4 x16",
+    "bidirectional_bandwidth_gb_s": 64.0,
+    "unidirectional_bandwidth_gb_s": 32.0
+  }
+}

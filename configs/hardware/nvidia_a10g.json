@@ -1,0 +1,20 @@
+{
+  "device_name": "NVIDIA A10G",
+  "architecture": "Ampere",
+  "compute_capability": "8.6",
+  "num_sms": 80,
+  "memory_capacity_gb": 24.0,
+  "memory_bus_width_bits": 384,
+  "memory_bandwidth_gb_s": 600.0,
+  "compute_tflops": {
+    "fp32": 31.2,
+    "fp16": 62.5,
+    "bf16": 62.5,
+    "fp8": null
+  },
+  "interconnect": {
+    "type": "PCIe Gen4 x16",
+    "bidirectional_bandwidth_gb_s": 64.0,
+    "unidirectional_bandwidth_gb_s": 32.0
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "device_name": "NVIDIA L40S",
+  "architecture": "Ada Lovelace",
+  "compute_capability": "8.9",
+  "num_sms": 142,
+  "memory_capacity_gb": 48.0,
+  "memory_bus_width_bits": 384,
+  "memory_bandwidth_gb_s": 864.0,
+  "compute_tflops": {
+    "fp32": 91.6,
+    "fp16": 366.0,
+    "bf16": 366.0,
+    "fp8": 733.0
+  },
+  "interconnect": {
+    "type": "PCIe Gen4 x16",
+    "bidirectional_bandwidth_gb_s": 64.0,
+    "unidirectional_bandwidth_gb_s": 32.0
+  }
+}
