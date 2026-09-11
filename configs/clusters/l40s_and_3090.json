@@ -1,0 +1,16 @@
+{
+  "cluster_name": "Mixed Tier: L40S + RTX 3090",
+  "description": "Emulated or real heterogeneous cluster with 2x NVIDIA L40S and 2x NVIDIA RTX 3090",
+  "inventory": [
+    {
+      "device_spec": "nvidia_l40s.json",
+      "count": 2,
+      "cost_per_hour_usd": 1.20
+    },
+    {
+      "device_spec": "nvidia_rtx_3090.json",
+      "count": 2,
+      "cost_per_hour_usd": 0.30
+    }
+  ]
+}

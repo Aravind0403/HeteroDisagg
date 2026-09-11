@@ -33,4 +33,5 @@ venv.bak/
 htmlcov/
 
 accelerator_spec.json
+launch_scripts/
 .DS_Store

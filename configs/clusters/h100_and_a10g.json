@@ -1,0 +1,16 @@
+{
+  "cluster_name": "Cloud Hybrid: H100 SXM5 + A10G",
+  "description": "High-throughput cloud cluster pairing 2x NVIDIA H100 SXM5 with 4x NVIDIA A10G",
+  "inventory": [
+    {
+      "device_spec": "nvidia_h100_sxm5.json",
+      "count": 2,
+      "cost_per_hour_usd": 3.50
+    },
+    {
+      "device_spec": "nvidia_a10g.json",
+      "count": 4,
+      "cost_per_hour_usd": 0.80
+    }
+  ]
+}

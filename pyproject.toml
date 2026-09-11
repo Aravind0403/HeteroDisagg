@@ -25,6 +25,7 @@ dev = [
 
 [project.scripts]
 hetero-prof = "hetero_prof.cli:main"
+hetero-plan = "hetero_policy.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
