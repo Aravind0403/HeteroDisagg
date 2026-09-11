@@ -76,7 +76,7 @@ cd HeteroDisagg
 pip install -e ".[dev]"
 ```
 
-### Running the Roofline Profiler (Phase 1)
+### 1. Hardware Profiling & Roofline Analysis (Phase 1)
 ```bash
 # Inspect active GPU (or auto-detect fallback)
 hetero-prof inspect
@@ -84,11 +84,35 @@ hetero-prof inspect
 # Inspect a reference hardware spec
 hetero-prof inspect --spec configs/hardware/nvidia_h100_sxm5.json
 
-# Calculate Roofline inflection and optimal chunk sizing
+# Calculate Roofline inflection and optimal chunk sizing for Llama 3 8B
 hetero-prof roofline --spec configs/hardware/nvidia_l40s.json --dtype fp16
+
+# Get hardware-derived chunk sizing recommendation
+hetero-prof recommend --spec configs/hardware/nvidia_l40s.json --dtype fp16
 
 # Export a standardized hardware capability descriptor
 hetero-prof export --spec configs/hardware/nvidia_rtx_4090.json --output accelerator_spec.json
+```
+
+### 2. Asymmetric KV Transfer & FP8 Wire Quantization (Phase 2)
+```bash
+# Run end-to-end 32-layer Llama-3-8B transfer comparison (FP16 vs. FP8 wire quantization)
+python scripts/demo_hetero_kv.py
+```
+
+### 3. Cluster Placement Planning & Zero-Fork Engine Launch (Phase 3)
+```bash
+# Evaluate a mixed cluster (2x L40S + 2x RTX 3090) for Llama-3-8B
+hetero-plan plan --cluster l40s_and_3090.json --model llama-3-8b
+
+# Evaluate a cloud hybrid cluster (2x H100 + 4x A10G) for Llama-3-70B
+hetero-plan plan --cluster h100_and_a10g.json --model llama-3-70b
+
+# Generate native vLLM launch scripts (launch_prefill_vllm.sh & launch_decode_vllm.sh)
+hetero-plan generate --cluster l40s_and_3090.json --model llama-3-8b --engine vllm
+
+# Generate native SGLang launch scripts
+hetero-plan generate --cluster l40s_and_3090.json --model llama-3-8b --engine sglang
 ```
 
 ---
@@ -98,8 +122,12 @@ hetero-prof export --spec configs/hardware/nvidia_rtx_4090.json --output acceler
 * [ARCHITECTURE.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/ARCHITECTURE.md): Progressive architectural decisions and deep-dive technical specs.
 * [TRADEOFFS.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/TRADEOFFS.md): Explicit record of design trade-offs, rejected alternatives, and rationale.
 * [BENCHMARKS.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/BENCHMARKS.md): Local mock simulations vs. real GPU cluster benchmark runs.
+* [docs/UPSTREAM_RFC.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/docs/UPSTREAM_RFC.md): Formal proposal for vLLM / SGLang communities.
+* [docs/TECHNICAL_REPORT.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/docs/TECHNICAL_REPORT.md): Comprehensive staff-level engineering report.
 * [configs/hardware/](file:///Users/aravindsundaresan/Development/HeteroDisagg/configs/hardware/): Reference hardware specifications for modern accelerators.
+* [configs/clusters/](file:///Users/aravindsundaresan/Development/HeteroDisagg/configs/clusters/): Reference heterogeneous cluster inventory profiles.
 * `hetero_prof/`: Phase 1 profiler, hardware detector, and roofline analysis engine.
 * `hetero_kv/`: Phase 2 asymmetric KV re-sharding connector with in-flight FP8 quantization.
 * `hetero_policy/`: Phase 3 hardware-adaptive engine adapter and cluster placement planner.
+* `scripts/`: Benchmark and demonstration runners.
 * `tests/`: Automated unit and integration test suite.
