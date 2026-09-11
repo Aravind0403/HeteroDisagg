@@ -64,19 +64,6 @@ In reality, data center clusters are heterogeneous (e.g. mixing H100s with L40S,
 
 ---
 
-## The 6 Learning Pillars
-
-| Pillar | Concept Area | Applied Implementation in HeteroDisagg |
-|---|---|---|
-| **1** | **CUDA Fundamentals + Profiling** | Interrogating SMs, tensor cores, memory bus width; measuring arithmetic intensity; profiling compute-communication overlap. |
-| **2** | **SGLang & vLLM Internals** | Chunked-prefill sizing, block table layout, RadixAttention tree metadata awareness, and zero-fork configuration adapters. |
-| **3** | **Disaggregated Serving** | Decoupling compute-bound prefill from bandwidth-bound decode, pipelining transfers across layers, and hiding KV transmission latency. |
-| **4** | **Multi-GPU Deployment** | Asymmetric Tensor Parallelism (`prefill_tp != decode_tp`), handling Grouped Query Attention (GQA) head divisibility, and cluster power/clock throttling emulation. |
-| **5** | **Distributed Training Awareness** | Parallels between asymmetric KV re-sharding and distributed training collectives (all-gather, reduce-scatter, all-to-all sharding). |
-| **6** | **Quantization-Aware Serving (+ MoE)** | In-flight FP8 (E4M3) block quantization to halve interconnect traffic, with analysis of heterogeneous expert placement in Mixture of Experts (MoE). |
-
----
-
 ## Quickstart
 
 ### Installation
