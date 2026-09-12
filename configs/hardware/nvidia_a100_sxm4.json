@@ -1,0 +1,20 @@
+{
+  "device_name": "NVIDIA A100-SXM4-40GB",
+  "architecture": "Ampere",
+  "compute_capability": "8.0",
+  "num_sms": 108,
+  "memory_capacity_gb": 40.0,
+  "memory_bus_width_bits": 5120,
+  "memory_bandwidth_gb_s": 1555.0,
+  "compute_tflops": {
+    "fp32": 19.5,
+    "fp16": 312.0,
+    "bf16": 312.0,
+    "fp8": null
+  },
+  "interconnect": {
+    "type": "NVLink 3 / PCIe Gen4",
+    "bidirectional_bandwidth_gb_s": 600.0,
+    "unidirectional_bandwidth_gb_s": 300.0
+  }
+}

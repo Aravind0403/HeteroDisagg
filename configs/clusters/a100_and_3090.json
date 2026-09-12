@@ -1,0 +1,16 @@
+{
+  "cluster_name": "Vast.ai Real Silicon: 1x A100 SXM4 + 2x RTX 3090",
+  "description": "Live production heterogeneous cluster: 1x A100 SXM4 (40GB HBM2) Prefill tier and 2x RTX 3090 (24GB GDDR6X) Decode tier",
+  "inventory": [
+    {
+      "device_spec": "nvidia_a100_sxm4.json",
+      "count": 1,
+      "cost_per_hour_usd": 1.50
+    },
+    {
+      "device_spec": "nvidia_rtx_3090.json",
+      "count": 2,
+      "cost_per_hour_usd": 0.545
+    }
+  ]
+}
