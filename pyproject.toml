@@ -27,6 +27,10 @@ dev = [
 hetero-prof = "hetero_prof.cli:main"
 hetero-plan = "hetero_policy.cli:main"
 
+[tool.setuptools.packages.find]
+include = ["hetero_prof*", "hetero_kv*", "hetero_policy*"]
+exclude = ["configs*", "tests*", "scripts*", "docs*", "launch_scripts*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
