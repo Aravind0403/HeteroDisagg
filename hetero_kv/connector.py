@@ -78,6 +78,9 @@ class HeteroKVConnector:
             quant_ms: Time spent packaging and quantizing.
             dequant_ms: Time spent reassembling and dequantizing.
         """
+        is_cuda = any(t.is_cuda for t in prefill_rank_shards.values()) if prefill_rank_shards else False
+        if is_cuda:
+            torch.cuda.synchronize()
         t0 = time.perf_counter()
         all_payloads: List[KVPayload] = []
 
@@ -93,6 +96,8 @@ class HeteroKVConnector:
             )
             all_payloads.extend(rank_payloads)
 
+        if is_cuda:
+            torch.cuda.synchronize()
         t1 = time.perf_counter()
         quant_ms = (t1 - t0) * 1000.0
 
@@ -107,6 +112,8 @@ class HeteroKVConnector:
             )
             decode_shards[d_rank] = reassembled
 
+        if is_cuda:
+            torch.cuda.synchronize()
         t3 = time.perf_counter()
         dequant_ms = (t3 - t2) * 1000.0
 
@@ -119,12 +126,17 @@ class HeteroKVConnector:
         seq_len: int,
         head_dim: int = 128,
         dtype: torch.dtype = torch.float16,
+        device: Optional[str] = None,
     ) -> TransferMetrics:
         """
         Benchmark simulated end-to-end multi-layer KV transfer pipeline.
         Generates synthetic KV tensors, partitions across prefill ranks, transfers,
         and verifies cosine similarity against un-partitioned ground truth.
         """
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        dev = torch.device(device)
+
         total_quant_ms = 0.0
         total_dequant_ms = 0.0
         total_wire_bytes = 0
@@ -134,7 +146,7 @@ class HeteroKVConnector:
         for layer in range(num_layers):
             # Generate ground-truth full KV tensor: (batch_size, seq_len, num_kv_heads, head_dim)
             ground_truth = torch.randn(
-                batch_size, seq_len, self.num_kv_heads, head_dim, dtype=dtype
+                batch_size, seq_len, self.num_kv_heads, head_dim, dtype=dtype, device=dev
             )
             uncompressed_layer_bytes = ground_truth.nbytes
             total_uncompressed_bytes += uncompressed_layer_bytes
