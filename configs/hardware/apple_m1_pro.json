@@ -1,0 +1,20 @@
+{
+  "device_name": "Apple M1 Pro (16-core GPU)",
+  "architecture": "Apple Silicon (Avalanche/Blizzard)",
+  "compute_capability": "Metal 3",
+  "num_sms": 16,
+  "memory_capacity_gb": 16.0,
+  "memory_bus_width_bits": 256,
+  "memory_bandwidth_gb_s": 204.8,
+  "compute_tflops": {
+    "fp32": 5.3,
+    "fp16": 10.6,
+    "bf16": 10.6,
+    "fp8": null
+  },
+  "interconnect": {
+    "type": "Thunderbolt 4 / Unified Memory Fabric",
+    "bidirectional_bandwidth_gb_s": 8.0,
+    "unidirectional_bandwidth_gb_s": 4.0
+  }
+}

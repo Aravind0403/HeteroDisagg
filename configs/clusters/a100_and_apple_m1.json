@@ -1,0 +1,16 @@
+{
+  "cluster_name": "Hybrid Cloud-to-Edge: 1x A100 SXM4 + 1x Apple M1 Pro",
+  "description": "Hybrid cross-architecture topology: Cloud NVIDIA A100 SXM4 Prefill worker streaming quantized FP8 KV cache to local Apple Silicon M1 Pro Decode worker over TCP",
+  "inventory": [
+    {
+      "device_spec": "nvidia_a100_sxm4.json",
+      "count": 1,
+      "cost_per_hour_usd": 1.50
+    },
+    {
+      "device_spec": "apple_m1_pro.json",
+      "count": 1,
+      "cost_per_hour_usd": 0.15
+    }
+  ]
+}

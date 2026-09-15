@@ -48,3 +48,14 @@ def test_detect_device_fallback():
     assert isinstance(spec, AcceleratorSpec)
     assert spec.memory_bandwidth_gb_s > 0
     assert spec.compute_tflops.fp16 > 0
+
+
+def test_load_m1_pro_spec():
+    spec = load_spec_from_file("m1")
+    assert isinstance(spec, AcceleratorSpec)
+    assert "M1 Pro" in spec.device_name
+    assert spec.memory_capacity_gb == 16.0
+    assert spec.memory_bandwidth_gb_s == 204.8
+    assert spec.compute_tflops.fp16 == 10.6
+    assert "Thunderbolt" in spec.interconnect.type
+

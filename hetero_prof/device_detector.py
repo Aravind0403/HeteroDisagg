@@ -2,6 +2,8 @@
 
 import os
 import json
+import platform
+import subprocess
 from pathlib import Path
 from typing import Optional, List, Dict
 import torch
@@ -20,6 +22,14 @@ REFERENCE_ALIASES: Dict[str, str] = {
     "rtx3090": "nvidia_rtx_3090.json",
     "3090": "nvidia_rtx_3090.json",
     "a10g": "nvidia_a10g.json",
+    "m1": "apple_m1_pro.json",
+    "m1pro": "apple_m1_pro.json",
+    "m1_pro": "apple_m1_pro.json",
+    "apple_m1_pro": "apple_m1_pro.json",
+    "m3": "apple_m3_max.json",
+    "m3max": "apple_m3_max.json",
+    "m3_max": "apple_m3_max.json",
+    "apple_m3_max": "apple_m3_max.json",
 }
 
 
@@ -53,19 +63,35 @@ def get_available_reference_specs() -> List[str]:
 
 def detect_device(device_index: int = 0, fallback_spec: str = "nvidia_rtx_4090.json") -> AcceleratorSpec:
     """
-    Detect the active NVIDIA GPU at the specified device index.
-    If CUDA is unavailable (e.g. running on macOS local development),
-    gracefully fall back to the reference specification.
+    Detect the active accelerator.
+    On macOS (Apple Silicon), automatically detects M-series hardware if CUDA is absent.
+    If running in a non-CUDA environment, falls back to the requested fallback_spec.
     """
     if not torch.cuda.is_available():
+        # If running locally on Apple Silicon Mac
+        if platform.system() == "Darwin":
+            try:
+                brand = subprocess.check_output(
+                    ["sysctl", "-n", "machdep.cpu.brand_string"], text=True
+                ).strip()
+                if "M1" in brand:
+                    m1_path = CONFIG_DIR / "apple_m1_pro.json"
+                    if m1_path.exists():
+                        return load_spec_from_file(m1_path)
+                elif "M3" in brand:
+                    m3_path = CONFIG_DIR / "apple_m3_max.json"
+                    if m3_path.exists():
+                        return load_spec_from_file(m3_path)
+            except Exception:
+                pass
+
         fallback_path = CONFIG_DIR / fallback_spec
         if fallback_path.exists():
             return load_spec_from_file(fallback_path)
-        # Fallback to the first available config file
         configs = list(CONFIG_DIR.glob("*.json"))
         if configs:
             return load_spec_from_file(configs[0])
-        raise RuntimeError("CUDA is not available and no reference hardware configs were found.")
+        raise RuntimeError("No reference hardware configs were found.")
 
     device_count = torch.cuda.device_count()
     if device_index >= device_count:

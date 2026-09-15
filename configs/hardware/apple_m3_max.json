@@ -1,0 +1,20 @@
+{
+  "device_name": "Apple M3 Max (40-core GPU)",
+  "architecture": "Apple Silicon (M3 Max)",
+  "compute_capability": "Metal 3",
+  "num_sms": 40,
+  "memory_capacity_gb": 128.0,
+  "memory_bus_width_bits": 512,
+  "memory_bandwidth_gb_s": 409.6,
+  "compute_tflops": {
+    "fp32": 14.2,
+    "fp16": 28.4,
+    "bf16": 28.4,
+    "fp8": null
+  },
+  "interconnect": {
+    "type": "Thunderbolt 4 / Unified Memory Fabric",
+    "bidirectional_bandwidth_gb_s": 8.0,
+    "unidirectional_bandwidth_gb_s": 4.0
+  }
+}
