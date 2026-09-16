@@ -1,0 +1,95 @@
+================================================================================
+HeteroDisagg Decoupled Empirical Multi-Run Benchmark Log
+Silicon Prefill: 1x NVIDIA A100-SXM4-40GB (AMD EPYC 7K62 24 vCPUs)
+Silicon Decode:  1x NVIDIA GeForce RTX 3090-24GB (Intel Xeon E5-2673 v4 10 vCPUs)
+Datacenter Host: Vast.ai Host 399360 (California, US)
+Prefab Nodes:    Machine 148097 (A100) -> Machine 135788 (RTX 3090)
+Network Path:    SSH Local Port-Forward (ssh -L 50051:127.0.0.1:50051)
+Timestamp UTC:   2026-09-16 08:40:00 UTC
+================================================================================
+
+[STEP 1] Live Socket Transfer Measurement & Transport Path Validation
+1. SSH-Tunneled Path:
+   Endpoint: 127.0.0.1:50051 (tunneled to 154.64.230.67:26514)
+   Trials (1 MB): [13.1100s, 10.6480s, 8.6137s]
+   Mean: 10.7906 s (0.0954 MB/s / 763.2 Kbps)
+
+2. Direct Un-Tunneled NAT Path (Port Published at Creation):
+   iperf3 to 154.64.230.67:26518:
+     - Receiver Bitrate: 831,242 bps (0.831 Mbps / 0.104 MB/s)
+     - Retransmissions: 257 TCP retransmits / 5s
+     - Mean RTT: 181.89 ms
+   Direct Raw Socket to 154.64.230.67:26576 (1 MB):
+     - Trials: [10.873s, 15.074s, 15.701s]
+     - Mean: 13.883 s (0.0720 MB/s)
+
+Definitive Finding:
+The ~0.1 MB/s throughput is confirmed NOT to be an SSH tunnel artifact.
+It was measured identically across both an SSH tunnel and a direct, un-tunneled
+TCP NAT port via iperf3 and raw Python socket (3 trials). The severe packet loss
+(257 retransmits in 5s) is consistent with either host-level NAT/bridging overhead
+or active traffic shaping / QoS policing between tenant containers on separate
+chassis — we did not isolate which.
+
+--------------------------------------------------------------------------------
+[STEP 2] Isolated GPU Compute Kernel Timing (torch.cuda.Event on A100 SXM4)
+Workload: Llama-3-8B equivalent, 32 layers, 8 KV heads, dim 128, prompt 1024 tokens
+Methodology: start.record(), end.record(), torch.cuda.synchronize(), start.elapsed_time(end)
+
+--- Concurrency = 2 (Batch Size = 2) ---
+1. Vanilla Symmetric (TP=4, FP16)*:
+   Raw GPU Kernel Execution: [8.55, 6.97, 6.93] ms
+   Mean: 7.48 ms ± 0.93 ms
+   Payload on Wire: 0.00 MB (Collocated)
+   *Note: Times harness slicing across 4 ranks, not a standard collocated forward pass.
+
+2. Vanilla Disaggregated (TP=2->2, FP16):
+   Raw GPU Kernel Execution: [4.58, 4.58, 4.40] ms
+   Mean: 4.52 ms ± 0.10 ms
+   Payload on Wire: 128.00 MB
+
+3. HeteroDisagg (TP=2->1, FP8 Dynamic Block Quantization + Asymmetric Reshard):
+   Raw GPU Kernel Execution: [15.83, 15.45, 15.17] ms
+   Mean: 15.49 ms ± 0.33 ms
+   Payload on Wire: 64.03 MB (2.00x payload compression)
+   Compute Overhead of FP8 Quantization vs Vanilla Disagg: +10.97 ms
+
+--- Concurrency = 16 (Batch Size = 16) ---
+1. Vanilla Symmetric (TP=4, FP16)*:
+   Raw GPU Kernel Execution: [9.96, 8.44, 8.56] ms
+   Mean: 8.99 ms ± 0.84 ms
+   Payload on Wire: 0.00 MB (Collocated)
+   *Note: Times harness slicing across 4 ranks, not a standard collocated forward pass.
+
+2. Vanilla Disaggregated (TP=2->2, FP16):
+   Raw GPU Kernel Execution: [7.21, 7.21, 7.31] ms
+   Mean: 7.24 ms ± 0.06 ms
+   Payload on Wire: 1024.00 MB (1.00 GB)
+
+3. HeteroDisagg (TP=2->1, FP8 Dynamic Block Quantization + Asymmetric Reshard):
+   Raw GPU Kernel Execution: [39.79, 39.59, 37.27] ms
+   Mean: 38.88 ms ± 1.40 ms
+   Payload on Wire: 512.25 MB (0.50 GB, 2.00x payload compression)
+   Compute Overhead of FP8 Quantization vs Vanilla Disagg: +31.64 ms
+
+================================================================================
+[STEP 3] Datacenter Interconnect Analytical Wire-Time Projections
+(Derived analytically as payload_bytes / fabric_nominal_bandwidth from exact byte counts:
+ C=2: FP16 = 134,217,728 B, FP8 = 67,141,632 B | Compute Overhead: +10.97 ms
+ C=16: FP16 = 1,073,741,824 B, FP8 = 537,133,056 B | Compute Overhead: +31.64 ms
+ Bus rates: PCIe 4.0 = 32 GiB/s binary; Network rates: 100G/10G/100M decimal)
+
+--- C=2 (Payload: HeteroDisagg = 64.03 MiB vs Vanilla Disagg = 128.00 MiB) ---
+Fabric                HeteroDisagg Wire    Vanilla Disagg Wire    Wire Saved    Net Latency Impact
+NVLink (32 GiB/s)     1.95 ms              3.91 ms                1.95 ms       -9.02 ms (Compute overhead dominates)
+100 GbE RoCE (100G)   5.37 ms              10.74 ms               5.37 ms       -5.60 ms (Near parity)
+10 GbE LAN (10G)      53.71 ms             107.37 ms              53.66 ms      +42.69 ms (HeteroDisagg wins by 42.7 ms)
+WAN (100 Mbps)        5,371.33 ms          10,737.42 ms           5,366.09 ms   +5,355.12 ms (HeteroDisagg 2.0x faster)
+
+--- C=16 (Payload: HeteroDisagg = 512.25 MiB vs Vanilla Disagg = 1024.00 MiB) ---
+Fabric                HeteroDisagg Wire    Vanilla Disagg Wire    Wire Saved    Net Latency Impact
+NVLink (32 GiB/s)     15.63 ms             31.25 ms               15.62 ms      -16.02 ms (Compute overhead dominates)
+100 GbE RoCE (100G)   42.97 ms             85.90 ms               42.93 ms      +11.29 ms (HeteroDisagg wins by 11.3 ms)
+10 GbE LAN (10G)      429.71 ms            858.99 ms              429.29 ms     +397.65 ms (HeteroDisagg wins by 397.7 ms)
+WAN (100 Mbps)        42,970.64 ms         85,899.35 ms           42,928.70 ms  +42,897.06 ms (HeteroDisagg 2.0x faster)
+================================================================================

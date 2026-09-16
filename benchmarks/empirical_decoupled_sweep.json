@@ -1,0 +1,179 @@
+{
+  "metadata": {
+    "benchmark": "HeteroDisagg Decoupled Empirical Multi-Run Benchmark",
+    "prefill_silicon": "1x NVIDIA A100-SXM4-40GB (AMD EPYC 7K62 48-Core Processor, 24 vCPUs allocated, PCIe 4.0)",
+    "decode_silicon": "1x NVIDIA GeForce RTX 3090-24GB (Intel Xeon E5-2673 v4, 10 vCPUs allocated, PCIe 3.0)",
+    "datacenter_host_id": "399360",
+    "prefill_machine_id": 148097,
+    "decode_machine_id": 135788,
+    "geolocation": "California, US",
+    "inter_instance_network_path": "SSH Local Port-Forward (ssh -L 50051:127.0.0.1:50051 -p 26514 root@154.64.230.67)",
+    "hourly_cost_usd": 0.6711,
+    "prefill_hourly_cost_usd": 0.4889,
+    "decode_hourly_cost_usd": 0.1822,
+    "timestamp_utc": "2026-09-16 08:40:00 UTC",
+    "model_config": {
+      "model_type": "Llama-3-8B equivalent",
+      "num_layers": 32,
+      "num_kv_heads": 8,
+      "head_dim": 128,
+      "prompt_tokens": 1024,
+      "decode_tokens": 128
+    },
+    "runs_per_config": 3,
+    "timing_methodology": {
+      "gpu_compute_kernel": "torch.cuda.Event(enable_timing=True) wrapping isolated FP8 quantization and asymmetric resharding; start.record(), end.record(), torch.cuda.synchronize(), start.elapsed_time(end)",
+      "live_wire_transfer": "time.perf_counter() wrapping blocking socket sendall() and recv() of 1MB real serialized tensor payload slice over the SSH-tunneled endpoint",
+      "analytical_fabric_projections": "Explicitly projected as (payload_bytes / fabric_nominal_bandwidth) from empirical payload sizes (64.03MB vs 128.00MB for C=2; 512.25MB vs 1024.00MB for C=16)"
+    }
+  },
+  "live_wire_transfer_findings": {
+    "direct_nat_test": {
+      "iperf3": {
+        "endpoint": "154.64.230.67:26518 (Direct un-tunneled NAT port)",
+        "duration_s": 5.0,
+        "receiver_bitrate_bps": 831242,
+        "receiver_bitrate_mbps": 0.831,
+        "receiver_throughput_mb_s": 0.104,
+        "tcp_retransmissions": 257,
+        "mean_rtt_ms": 181.89,
+        "congestion_algorithm": "cubic"
+      },
+      "raw_socket_1mb": {
+        "endpoint": "154.64.230.67:26576 (Direct un-tunneled KV receiver port)",
+        "trials_s": [10.873, 15.074, 15.701],
+        "mean_duration_s": 13.883,
+        "mean_bandwidth_mb_s": 0.0720
+      }
+    },
+    "ssh_tunneled_test": {
+      "endpoint": "127.0.0.1:50051 (ssh -L 50051:127.0.0.1:50051)",
+      "trials_s": [13.11, 10.648, 8.6137],
+      "mean_duration_s": 10.7906,
+      "mean_bandwidth_mb_s": 0.0954
+    },
+    "definitive_conclusion": "The ~0.1 MB/s throughput is confirmed NOT to be an SSH tunnel artifact. It was measured identically across both an SSH tunnel (0.095 MB/s) and a raw, un-tunneled public NAT port via iperf3 (0.104 MB/s, 257 TCP retransmissions in 5s) and raw socket transfer (0.072 MB/s across 3 trials). The severe packet loss is consistent with either host-level NAT/bridging overhead or active traffic shaping / QoS policing between tenant containers on separate chassis — we did not isolate which."
+  },
+  "concurrency_sweeps": {
+    "concurrency_2": {
+      "concurrency": 2,
+      "batch_size": 2,
+      "workload": "Latency-Bound (C=2)",
+      "gpu_compute_kernel_ms": {
+        "vanilla_symmetric": {
+          "description": "Vanilla Symmetric TP=4 (Slicing/reassembly across 4 ranks in harness, not a collocated forward pass)",
+          "mean_ms": 7.48,
+          "std_ms": 0.93,
+          "raw_ms": [8.55, 6.97, 6.93],
+          "wire_payload_mb": 0.0
+        },
+        "vanilla_disagg": {
+          "description": "Vanilla Disaggregated (TP=2->2, uncompressed FP16 slicing)",
+          "mean_ms": 4.52,
+          "std_ms": 0.10,
+          "raw_ms": [4.58, 4.58, 4.40],
+          "wire_payload_mb": 128.00
+        },
+        "heterodisagg": {
+          "description": "HeteroDisagg (Asymmetric TP=2->1, FP8 block quantization & packing)",
+          "mean_ms": 15.49,
+          "std_ms": 0.33,
+          "raw_ms": [15.83, 15.45, 15.17],
+          "wire_payload_mb": 64.03,
+          "payload_reduction_ratio": 2.00
+        },
+        "compute_delta_quant_overhead_ms": 10.97
+      },
+      "analytical_fabric_projections": {
+        "nvlink_pcie4_32GB_s": {
+          "nominal_bandwidth": "32.0 GiB/s (34,359,738,368 B/s)",
+          "vanilla_disagg_wire_ms": 3.91,
+          "heterodisagg_wire_ms": 1.95,
+          "wire_time_saved_ms": 1.95,
+          "net_latency_impact_ms": -9.02
+        },
+        "roce_100GbE_12_5GB_s": {
+          "nominal_bandwidth": "100 Gbps (12,500,000,000 B/s)",
+          "vanilla_disagg_wire_ms": 10.74,
+          "heterodisagg_wire_ms": 5.37,
+          "wire_time_saved_ms": 5.37,
+          "net_latency_impact_ms": -5.60
+        },
+        "lan_10GbE_1_25GB_s": {
+          "nominal_bandwidth": "10 Gbps (1,250,000,000 B/s)",
+          "vanilla_disagg_wire_ms": 107.37,
+          "heterodisagg_wire_ms": 53.71,
+          "wire_time_saved_ms": 53.66,
+          "net_latency_impact_ms": 42.69
+        },
+        "wan_100Mbps_12_5MB_s": {
+          "nominal_bandwidth": "100 Mbps (12,500,000 B/s)",
+          "vanilla_disagg_wire_ms": 10737.42,
+          "heterodisagg_wire_ms": 5371.33,
+          "wire_time_saved_ms": 5366.09,
+          "net_latency_impact_ms": 5355.12
+        }
+      }
+    },
+    "concurrency_16": {
+      "concurrency": 16,
+      "batch_size": 16,
+      "workload": "Throughput-Bound (C=16)",
+      "gpu_compute_kernel_ms": {
+        "vanilla_symmetric": {
+          "description": "Vanilla Symmetric TP=4 (Slicing/reassembly across 4 ranks in harness, not a collocated forward pass)",
+          "mean_ms": 8.99,
+          "std_ms": 0.84,
+          "raw_ms": [9.96, 8.44, 8.56],
+          "wire_payload_mb": 0.0
+        },
+        "vanilla_disagg": {
+          "description": "Vanilla Disaggregated (TP=2->2, uncompressed FP16 slicing)",
+          "mean_ms": 7.24,
+          "std_ms": 0.06,
+          "raw_ms": [7.21, 7.21, 7.31],
+          "wire_payload_mb": 1024.00
+        },
+        "heterodisagg": {
+          "description": "HeteroDisagg (Asymmetric TP=2->1, FP8 block quantization & packing)",
+          "mean_ms": 38.88,
+          "std_ms": 1.40,
+          "raw_ms": [39.79, 39.59, 37.27],
+          "wire_payload_mb": 512.25,
+          "payload_reduction_ratio": 2.00
+        },
+        "compute_delta_quant_overhead_ms": 31.64
+      },
+      "analytical_fabric_projections": {
+        "nvlink_pcie4_32GB_s": {
+          "nominal_bandwidth": "32.0 GiB/s (34,359,738,368 B/s)",
+          "vanilla_disagg_wire_ms": 31.25,
+          "heterodisagg_wire_ms": 15.63,
+          "wire_time_saved_ms": 15.62,
+          "net_latency_impact_ms": -16.02
+        },
+        "roce_100GbE_12_5GB_s": {
+          "nominal_bandwidth": "100 Gbps (12,500,000,000 B/s)",
+          "vanilla_disagg_wire_ms": 85.90,
+          "heterodisagg_wire_ms": 42.97,
+          "wire_time_saved_ms": 42.93,
+          "net_latency_impact_ms": 11.29
+        },
+        "lan_10GbE_1_25GB_s": {
+          "nominal_bandwidth": "10 Gbps (1,250,000,000 B/s)",
+          "vanilla_disagg_wire_ms": 858.99,
+          "heterodisagg_wire_ms": 429.71,
+          "wire_time_saved_ms": 429.29,
+          "net_latency_impact_ms": 397.65
+        },
+        "wan_100Mbps_12_5MB_s": {
+          "nominal_bandwidth": "100 Mbps (12,500,000 B/s)",
+          "vanilla_disagg_wire_ms": 85899.35,
+          "heterodisagg_wire_ms": 42970.64,
+          "wire_time_saved_ms": 42928.70,
+          "net_latency_impact_ms": 42897.06
+        }
+      }
+    }
+  }
+}

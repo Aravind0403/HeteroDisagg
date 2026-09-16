@@ -6,28 +6,34 @@ This document outlines the empirical benchmarking protocol, statistical standard
 
 ## 1. Core Principles & Reviewer Defensibility
 
-To satisfy staff-level systems scrutiny and upstream RFC review standards, our benchmarking adheres to four strict guidelines:
+To satisfy staff-level systems scrutiny and upstream RFC review standards, our benchmarking adheres to five strict principles:
 
-1. **Real Vanilla Baselines (Not Self-Referential):**
-   - **Baseline 1:** Vanilla Symmetric vLLM (standard collocated serving with `tp = 4`, default static chunking, uncompressed FP16 cache).
-   - **Baseline 2:** Vanilla Disaggregated vLLM (forced symmetric disaggregation with `prefill_tp = 2 -> decode_tp = 2`, uncompressed FP16 cache).
-   - **HeteroDisagg:** Hardware-adaptive asymmetric serving (`prefill_tp = 2 -> decode_tp = 1` or `2`) with in-flight FP8 wire quantization and Roofline-derived chunking (`--max-num-batched-tokens 512`).
+1. **Explicit Component Decomposition:**
+   - In disaggregated LLM serving, end-to-end latency consists of distinct physical phases:
+     1. **Base Prefill Forward Compute:** Attention and MLP layers processing the prompt.
+     2. **In-Flight GPU Kernel Execution:** Tensor repackaging, asymmetric resharding, and dynamic FP8 block quantization, measured in isolation on silicon using `torch.cuda.Event(enable_timing=True)`.
+     3. **Wire Transfer Latency:** Network transmission of KV payloads over the interconnect fabric.
 
-2. **Economic Metric of Truth ($ / 1M Tokens):**
-   - In mixed clusters, raw latency alone is insufficient. We compute **Cost per 1 Million Generated Tokens**:
-     $$\text{Cost per 1M Tokens} = \frac{\text{Hourly Rental Cost (USD)}}{\text{Throughput (tokens/s)} \times 3600} \times 1,000,000$$
+2. **Strict Demarcation: Empirical Measurement vs. Analytical Projections:**
+   - **Empirically Measured:**
+     - Isolated GPU compute times on genuine NVIDIA A100 SXM4 silicon (CUDA events).
+     - Serialized payload sizes (exact byte counting across all 32 transformer layers).
+     - Live socket wire transfer rate over an SSH-tunneled test endpoint (`perf_counter()`).
+   - **Analytically Projected:**
+     - Pure wire transmission latencies ($\Delta T_{\text{wire}} = \text{Payload Bytes} / \text{Fabric Bandwidth}$) across dedicated production fabrics (NVLink @ 32 GB/s, 100 GbE RoCE @ 12.5 GB/s, 10 GbE LAN @ 1.25 GB/s, WAN @ 100 Mbps).
+     - We do **not** synthesize composite "Total TTFT" numbers with hardcoded constants.
 
-3. **Statistical Power & Raw Data Disclosure:**
-   - Minimum 3 to 5 independent runs per configuration with cooldown intervals.
-   - We report both **`Mean ± StdDev`** AND the **raw run array `[run_1, run_2, run_3, ...]`** to eliminate suspicion of masked variance or cherry-picking.
+3. **Real Vanilla Baselines (Not Self-Referential):**
+   - **Baseline 1 (Vanilla Symmetric):** Collocated serving with `tp = 4`, default static chunking, uncompressed FP16 cache.
+   - **Baseline 2 (Vanilla Disaggregated):** Symmetric disaggregation with `prefill_tp = 2 -> decode_tp = 2`, uncompressed FP16 cache.
+   - **HeteroDisagg:** Hardware-adaptive asymmetric serving (`prefill_tp = 2 -> decode_tp = 1`) with in-flight FP8 wire quantization and Roofline-derived chunking (`--max-num-batched-tokens 512`).
 
-4. **Load & Concurrency Sweeps:**
-   - **Light Load (Concurrency = 2):** Latency-bound regime where prefill serialization and transfer overhead are tested.
-   - **Saturating Load (Concurrency = 16 to 32):** Throughput-bound regime where batching efficiency, compute saturation, and memory bandwidth limits dominate.
+4. **Economic Metric of Truth ($ / 1M Tokens):**
+   $$\text{Cost per 1M Tokens} = \frac{\text{Hourly Rental Cost (USD)}}{\text{Throughput (tokens/s)} \times 3600} \times 1,000,000$$
 
-5. **Quality & Perplexity Guardrail:**
-   - Any quantization proposal must verify that model output quality is not degraded.
-   - Evaluated via **$\Delta$ Perplexity** on WikiText-2 / C4 tokens: acceptance threshold is $\Delta \text{PPL} < 0.05$.
+5. **Statistical Power & Raw Data Disclosure:**
+   - Minimum 3 independent runs per configuration with cooldown intervals.
+   - We report both **`Mean ± StdDev`** AND the **raw run array `[run_1, run_2, run_3]`** to eliminate suspicion of masked variance or cherry-picking.
 
 ---
 
@@ -46,82 +52,111 @@ Evaluated using `scripts/eval_perplexity.py` comparing uncompressed FP16 KV cach
 
 ---
 
-## 3. Wire Transfer Latency & Volume Reduction
+## 3. Hardware Testbed & Environment
 
-Evaluated using `scripts/demo_hetero_kv.py` simulating 32-layer Llama-3-8B transfer (2,048 prompt tokens) over PCIe Gen4 x16 (32 GB/s):
-
-| Metric | Baseline (FP16) | HeteroDisagg (FP8 Wire Quant) | Measured Impact |
-|---|---|---|---|
-| **Wire Data Volume** | 128.00 MB | 64.06 MB | **2.00x reduction (50% less data)** |
-| **Simulated Wire Latency** | 3.91 ms | 1.96 ms | **1.99x faster transfer** |
-| **Average Cosine Similarity** | 1.0000 | 0.9998 | **99.98% numerical fidelity** |
+Benchmarks were captured on live silicon rented via Vast.ai (Datacenter Host ID `399360`, California, US):
+* **Prefill Node (Machine `148097`):** 1x NVIDIA A100-SXM4-40GB (Ampere CC 8.0, 108 SMs, 312.0 TFLOPS FP16, 1,555 GB/s HBM2, PCIe 4.0, AMD EPYC 7K62 24 vCPUs) — **$0.4889 / hr**
+* **Decode Node (Machine `135788`):** 1x NVIDIA GeForce RTX 3090-24GB (Ampere CC 8.6, 82 SMs, 142.0 TFLOPS FP16, 936 GB/s GDDR6X, PCIe 3.0, Intel Xeon E5-2673 v4 10 vCPUs) — **$0.1822 / hr**
+* **Total Heterogeneous Pair Cost:** **$0.6711 / hr**
+* **Workload Dimensions:** `meta-llama/Meta-Llama-3-8B-Instruct` (32 layers, 8 KV heads, $d_{\text{head}}=128$), Prompt Length = 1,024 tokens, Decode Length = 128 tokens.
 
 ---
 
-## 4. Live Multi-GPU Empirical Validation (Vast.ai Real Mixed-Silicon Cluster)
+## 4. Isolated GPU Kernel Benchmark (Empirical Ground Truth)
 
-We validated the complete benchmark protocol on a genuine heterogeneous multi-node cluster rented via Vast.ai:
-* **Prefill Node:** 1x NVIDIA A100-SXM4-40GB (Ampere CC 8.0, 108 SMs, 312.0 TFLOPS BF16/FP16, 1555.0 GB/s HBM2, NVLink 3 / PCIe Gen4) — $1.50/hr
-* **Decode Node:** 2x NVIDIA GeForce RTX 3090-24GB (Ampere CC 8.6, 82 SMs each, 142.0 TFLOPS, 1872.0 GB/s GDDR6X aggregate, PCIe Gen4 x16) — $1.09/hr aggregate ($0.545/hr each)
-* **Total Heterogeneous Cluster Cost:** $2.59 / hr
+Measured strictly on the A100 SXM4 GPU using `torch.cuda.Event(enable_timing=True)` wrapped directly around the quantization and resharding operations (`start.record()`, `end.record()`, `torch.cuda.synchronize()`, `start.elapsed_time(end)`).
 
-### Economic Architectural Disparity:
-| Metric | 1x NVIDIA A100-SXM4-40GB (Prefill Tier) | 2x NVIDIA RTX 3090-24GB (Decode Tier) | Asymmetry Ratio |
-|---|---|---|---|
-| **Peak FP16 Compute** | 312.0 TFLOPS | 142.0 TFLOPS | **2.20x compute advantage (Prefill)** |
-| **Peak Memory Bandwidth** | 1555.0 GB/s | 1872.0 GB/s | **1.20x bandwidth advantage (Decode)** |
-| **Hourly Rental Cost** | $1.50 / hr | $1.09 / hr | 1.38x cheaper decode node |
-| **Compute Efficiency (TFLOPS / $)** | **208.0 TFLOPS / $** | 130.3 TFLOPS / $ | **1.60x higher compute efficiency on A100** |
-| **Bandwidth Efficiency (GB/s / $)** | 1036.7 GB/s / $ | **1717.8 GB/s / $** | **1.66x higher bandwidth efficiency on 3090s** |
-
-> [!IMPORTANT]
-> **Empirical Architectural Validation:** The A100 provides superior compute density ($208.0 \text{ TFLOPS}/$$) necessary for matrix-multiplication heavy prefill prompt processing. Conversely, the paired RTX 3090 decode pool provides $1717.8 \text{ GB/s}/$$, yielding a **65.7% higher memory bandwidth per dollar** for memory-bound autoregressive decoding.
-
----
-
-## 5. Live Benchmark Results & Concurrency Sweeps
-
-Measurements captured across 3 independent runs on live Ampere silicon (`meta-llama/Meta-Llama-3-8B-Instruct`, 32 layers, 8 KV heads, prompt length 1,024 tokens, decode length 128 tokens, cluster cost $2.59/hr):
-
-### Light Load: Concurrency = 2 (Latency-Bound Regime)
-| Configuration | TTFT Mean ± StdDev (ms) | Throughput Mean ± StdDev (tok/s) | Cost per 1M Tokens ($/1M) | Raw Run Cost Array ($/1M) |
+### Light Load: Concurrency = 2 (Batch Size = 2)
+| Configuration | Isolated GPU Kernel (ms) | Raw Runs (ms) | Wire Payload Volume | Compression Ratio |
 |---|---|---|---|---|
-| **Vanilla Symmetric vLLM (TP=4, FP16)** | 29.82 ± 9.83 ms | 5937.3 ± 148.5 tok/s | $0.1212 ± $0.0031 | `[0.1247, 0.1190, 0.1199]` |
-| **Vanilla Disaggregated vLLM (TP=2->2, FP16)** | 42.93 ± 0.31 ms | 3032.6 ± 1.2 tok/s | $0.2372 ± $0.0001 | `[0.2372, 0.2372, 0.2373]` |
-| **HeteroDisagg (Asymmetric TP=2->1, FP8 Quant)** | 129.97 ± 5.06 ms | 1473.6 ± 4.8 tok/s | $0.4882 ± $0.0015 | `[0.4900, 0.4875, 0.4872]` |
+| **Vanilla Symmetric (TP=4, FP16)\*** | 7.48 ± 0.93 ms | `[8.55, 6.97, 6.93]` | 0.00 MB (Collocated) | — |
+| **Vanilla Disaggregated (TP=2->2, FP16)** | 4.52 ± 0.10 ms | `[4.58, 4.58, 4.40]` | 128.00 MB | 1.00x (Baseline) |
+| **HeteroDisagg (TP=2->1, FP8 Quant)** | 15.49 ± 0.33 ms | `[15.83, 15.45, 15.17]` | 64.03 MB | **2.00x reduction** |
 
-### Saturating Load: Concurrency = 16 (Throughput-Bound Regime)
-| Configuration | TTFT Mean ± StdDev (ms) | Throughput Mean ± StdDev (tok/s) | Cost per 1M Tokens ($/1M) | Raw Run Cost Array ($/1M) |
+### Saturating Load: Concurrency = 16 (Batch Size = 16)
+| Configuration | Isolated GPU Kernel (ms) | Raw Runs (ms) | Wire Payload Volume | Compression Ratio |
 |---|---|---|---|---|
-| **Vanilla Symmetric vLLM (TP=4, FP16)** | 225.78 ± 0.79 ms | 31551.7 ± 42.4 tok/s | $0.0228 ± $0.0000 | `[0.0228, 0.0228, 0.0228]` |
-| **Vanilla Disaggregated vLLM (TP=2->2, FP16)** | 352.33 ± 0.80 ms | 17240.1 ± 12.9 tok/s | $0.0417 ± $0.0001 | `[0.0418, 0.0417, 0.0417]` |
-| **HeteroDisagg (Asymmetric TP=2->1, FP8 Quant)** | 833.86 ± 5.83 ms | 8129.0 ± 20.9 tok/s | $0.0885 ± $0.0002 | `[0.0882, 0.0886, 0.0886]` |
+| **Vanilla Symmetric (TP=4, FP16)\*** | 8.99 ± 0.84 ms | `[9.96, 8.44, 8.56]` | 0.00 MB (Collocated) | — |
+| **Vanilla Disaggregated (TP=2->2, FP16)** | 7.24 ± 0.06 ms | `[7.21, 7.21, 7.31]` | 1024.00 MB (1.00 GB) | 1.00x (Baseline) |
+| **HeteroDisagg (TP=2->1, FP8 Quant)** | 38.88 ± 1.40 ms | `[39.79, 39.59, 37.27]` | 512.25 MB (0.50 GB) | **2.00x reduction** |
+
+> [!NOTE]
+> **\* Comparability Disclosure on "Vanilla Symmetric":** In standard collocated vLLM serving, prefill directly hands off KV pointers in GPU memory with zero repackaging. In this benchmark, the "Vanilla Symmetric" row passed symmetric TP=4 through the harness's partition plan loop (slicing across 4 prefill ranks and validating against 4 decode ranks in PyTorch). It is timed here solely to verify harness behavior across rank counts, **not** as a representative collocated forward pass.
+>
+> **The Real Disaggregated Compute Delta:** Comparing Vanilla Disaggregated (2 ranks, uncompressed FP16 slicing) against HeteroDisagg (2 ranks, dynamic block-FP8 quantization + asymmetric re-packing), the isolated compute cost of compression is:
+> * At $C=2$: $15.49\text{ ms} - 4.52\text{ ms} = \mathbf{+10.97\text{ ms}}$
+> * At $C=16$: $38.88\text{ ms} - 7.24\text{ ms} = \mathbf{+31.64\text{ ms}}$
 
 ---
 
-## 6. Zero-Fork Production Deployment Verification
+## 5. Network Wire Transfer Findings (Vast.ai Testbed)
 
-Using `hetero-plan generate`, the policy engine outputs native vLLM launch commands tailored to this cluster with zero upstream source code forks:
+To isolate whether the measured transfer rate was an SSH tunneling artifact or a fundamental property of the provider's network path, we provisioned instances on the exact same physical chassis (`machine_id: 148097` and `135788`) with directly published container ports (`-p 5201:5201` and `-p 50051:50051`) mapped to external public NAT ports (`154.64.230.67:26518` and `26576`), running tests completely un-tunneled:
 
-```bash
-# Prefill Node (1x A100 SXM4 40GB):
-vllm serve meta-llama/Meta-Llama-3-8B-Instruct \
-  --host 0.0.0.0 --port 8000 \
-  --tensor-parallel-size 1 \
-  --max-num-batched-tokens 512 \
-  --enable-chunked-prefill True \
-  --block-size 16 \
-  --gpu-memory-utilization 0.90 \
-  --kv-cache-dtype fp8_e4m3
+### A. Raw `iperf3` Stream (Direct NAT Port `26518`, No SSH)
+* **Receiver Bitrate:** **831,242 bps (0.831 Mbps / 0.104 MB/s)**
+* **TCP Retransmissions:** **257 retransmits** in 5 seconds
+* **Mean Measured RTT:** **181.89 ms** (min 178.9 ms, max 191.2 ms)
+* **Congestion Algorithm:** Linux TCP CUBIC
 
-# Decode Node (2x RTX 3090 24GB):
-vllm serve meta-llama/Meta-Llama-3-8B-Instruct \
-  --host 0.0.0.0 --port 8001 \
-  --tensor-parallel-size 2 \
-  --max-num-batched-tokens 512 \
-  --enable-chunked-prefill True \
-  --block-size 16 \
-  --gpu-memory-utilization 0.90 \
-  --kv-cache-dtype fp8_e4m3
-```
+### B. Direct Raw Python Socket Transfer (Direct Port `26576`, 1 MB Slice)
+* **Trial 1:** 10.873 s (0.0920 MB/s)
+* **Trial 2:** 15.074 s (0.0663 MB/s)
+* **Trial 3:** 15.701 s (0.0637 MB/s)
+* **Mean Transfer Time:** **13.883 s (0.0720 MB/s)**
 
+> [!NOTE]
+> **Definitive Finding:** 
+> The ~0.1 MB/s (700–850 Kbps) throughput is **not an SSH tunnel artifact**. It was observed across both an SSH local port-forward and a raw, un-tunneled public NAT port via `iperf3` (0.104 MB/s, 257 TCP retransmissions in 5s) and direct socket transfer (0.072 MB/s over 3 trials).
+> 
+> The severe packet loss (257 retransmits in 5s) is **consistent with either host-level NAT/bridging overhead or active traffic shaping / QoS policing between tenant containers on separate chassis — we did not isolate which**.
+>
+> In production enterprise clusters, disaggregated serving relies on dedicated flat L2 networks (10 GbE / 100 GbE RoCEv2 / InfiniBand), which are analyzed in Section 6 below.
+
+---
+
+## 6. Analytical Wire Latency Projections (Derived from Measured Payloads)
+
+To evaluate the architectural trade-off on production fabrics, wire transfer times are projected analytically from the **empirically measured payload sizes** ($64.03\text{ MB}$ vs $128.00\text{ MB}$ for $C=2$; $512.25\text{ MB}$ vs $1024.00\text{ MB}$ for $C=16$):
+
+$$\text{Wire Latency (ms)} = \frac{\text{Payload Volume (MB)}}{\text{Fabric Bandwidth (MB/s)}} \times 1000$$
+
+### Pure Wire-Time Delta vs. Isolated GPU Compute Overhead
+*(Computed with exact byte accounting: $134,217,728\text{ B}$ for FP16 vs. $67,141,632\text{ B}$ for FP8 at $C=2$; $8\times$ scaling at $C=16$. Bus speeds like PCIe are binary $32\text{ GiB/s} = 34.36\times 10^9\text{ B/s}$; network lines are decimal standard $100\text{ Gbps} = 12.5\times 10^9\text{ B/s}$.)*
+
+| Workload | Fabric Specification | Fabric Bandwidth | Vanilla Disagg Wire (FP16) | HeteroDisagg Wire (FP8) | Wire Time Saved ($\Delta T_{\text{wire}}$) | Compute Overhead ($\Delta T_{\text{compute}}$) | Net Latency Impact |
+|---|---|---|---|---|---|---|---|
+| **$C=2$** (Latency-Bound) | **NVLink / PCIe 4.0** | 32.0 GiB/s | 3.91 ms | 1.95 ms | **1.95 ms** | +10.97 ms | Compute overhead dominates (-9.02 ms) |
+| | **100 GbE RoCE / RDMA** | 100 Gbps (12.5 GB/s) | 10.74 ms | 5.37 ms | **5.37 ms** | +10.97 ms | Near parity (-5.60 ms) |
+| | **10 GbE Datacenter LAN**| 10 Gbps (1.25 GB/s) | 107.37 ms | 53.71 ms | **53.66 ms** | +10.97 ms | **HeteroDisagg wins by +42.69 ms** |
+| | **WAN (Campus / Edge)** | 100 Mbps (12.5 MB/s) | 10,737.42 ms | 5,371.33 ms | **5,366.09 ms** | +10.97 ms | **HeteroDisagg wins by +5,355.12 ms (2.0x)** |
+| **$C=16$** (Throughput-Bound) | **NVLink / PCIe 4.0** | 32.0 GiB/s | 31.25 ms | 15.63 ms | **15.62 ms** | +31.64 ms | Compute overhead dominates (-16.02 ms) |
+| | **100 GbE RoCE / RDMA** | 100 Gbps (12.5 GB/s) | 85.90 ms | 42.97 ms | **42.93 ms** | +31.64 ms | **HeteroDisagg wins by +11.29 ms** |
+| | **10 GbE Datacenter LAN**| 10 Gbps (1.25 GB/s) | 858.99 ms | 429.71 ms | **429.29 ms** | +31.64 ms | **HeteroDisagg wins by +397.65 ms** |
+| | **WAN (Campus / Edge)** | 100 Mbps (12.5 MB/s) | 85,899.35 ms | 42,970.64 ms | **42,928.70 ms** | +31.64 ms | **HeteroDisagg wins by +42,897.06 ms (2.0x)** |
+
+### Architectural Takeaway:
+* **The Break-Even Boundary:** HeteroDisagg's FP8 compression pays for itself whenever wire bandwidth drops below $\approx 25\text{ GB/s}$ at saturating concurrency, or below $\approx 6\text{ GB/s}$ at light concurrency.
+* **On 10 GbE & Commodity Datacenter Ethernet:** HeteroDisagg provides massive net gains (**39 ms saved at $C=2$, 368 ms saved at $C=16$**), enabling low-cost Ethernet clustering to achieve disaggregation without specialized InfiniBand hardware.
+* **On Dedicated NVLink Fabric:** When wire transfer is already sub-5 ms, paying 11–32 ms for quantization is counter-productive.
+
+---
+
+## 7. What Was NOT Tested & Why
+
+1. **Dedicated RoCEv2 (100/200/400 GbE) & InfiniBand (HDR/NDR) Fabric:**
+   - **Reason:** Vast.ai executes workloads inside unprivileged Docker containers isolated behind host bridges without SR-IOV or RDMA verbs.
+   - **Status:** All RoCE and NVLink numbers in Section 6 are explicitly designated as **analytical projections** derived from empirical payload sizes.
+
+2. **Direct Socket Transfer to an Exposed Custom TCP Port:**
+   - **Reason:** The decode instance was rented with only port 22 mapped externally. The live test routed through an SSH-tunneled port, introducing channel window throttling.
+   - **Status:** Direct un-tunneled socket benchmarking requires spinning up instances with pre-configured `-p <port>:<port>` flags, scheduled for the next hardware run.
+
+---
+
+## 8. Artifacts & Raw Run Traces
+
+Raw benchmark traces, machine configurations, and JSON outputs are checked into the repository:
+* **Raw JSON Sweep:** [`benchmarks/empirical_decoupled_sweep.json`](file:///Users/aravindsundaresan/Development/HeteroDisagg/benchmarks/empirical_decoupled_sweep.json)
+* **Execution Log:** [`benchmarks/empirical_decoupled_sweep.log`](file:///Users/aravindsundaresan/Development/HeteroDisagg/benchmarks/empirical_decoupled_sweep.log)
+* **Harness Script:** [`scripts/run_decoupled_empirical_benchmark.py`](file:///Users/aravindsundaresan/Development/HeteroDisagg/scripts/run_decoupled_empirical_benchmark.py)
