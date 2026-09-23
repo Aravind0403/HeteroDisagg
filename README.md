@@ -117,11 +117,39 @@ hetero-plan generate --cluster l40s_and_3090.json --model llama-3-8b --engine sg
 
 ---
 
+## Empirical Benchmark Highlights (Live Silicon Validation)
+
+Benchmarks were captured across physical Ampere silicon rented via Vast.ai (Datacenter Host ID `399360`, California, US) evaluating `meta-llama/Meta-Llama-3-8B-Instruct` (32 layers, 8 KV heads, prompt 1024, decode 128):
+
+* **Prefill Node:** 1x NVIDIA A100-SXM4-40GB ($0.4889/hr, 312 TFLOPS FP16, 1,555 GB/s HBM2)
+* **Decode Node:** 1x NVIDIA RTX 3090-24GB ($0.1822/hr, 142 TFLOPS FP16, 936 GB/s GDDR6X)
+* **Total Disaggregated Cluster Cost:** **$0.6711/hr**
+
+### Key Findings:
+1. **Architectural Workload-Hardware Match:**
+   * The A100 delivers **2.20x higher compute density** for compute-bound prompt prefill.
+   * The RTX 3090 yields **5,137 GB/s per dollar** vs A100's 3,180 GB/s per dollar (**+61.5% higher memory bandwidth efficiency per dollar**) for memory-bound token decoding.
+2. **In-Flight FP8 Wire Quantization:**
+   * Halves wire payload volume from 128 MB to 64 MB ($C=2$) and 1,024 MB to 512 MB ($C=16$).
+   * Preserves **99.98% cosine fidelity** with negligible perplexity degradation ($\Delta\text{PPL} \le 0.0018$).
+   * Measured GPU kernel overhead (quantization + bipartite GQA re-sharding) is only **10.97 ms** ($C=2$) and **31.64 ms** ($C=16$) on A100 silicon.
+3. **Network Break-Even Boundaries:**
+   * **10 GbE Datacenter Ethernet:** HeteroDisagg saves **+42.69 ms** at $C=2$ and **+397.65 ms** at $C=16$ net latency, enabling commodity Ethernet disaggregation without InfiniBand.
+   * **WAN / Edge Deployments (100 Mbps):** Wire savings exceed **5.3 seconds** ($2.0\times$ faster TTFT).
+   * **Dedicated NVLink (32 GB/s):** When wire transfer is sub-4 ms, quantization overhead dominates (the break-even wire bandwidth boundary is $\approx 6\text{--}25\text{ GB/s}$).
+
+For full empirical traces, socket RTT distributions, raw `iperf3` container bridge results, and analytical projections across fabrics:
+* See [SAME_HOST_BENCHMARKS.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/SAME_HOST_BENCHMARKS.md) for empirical hardware testbed measurements and network virtualization analysis.
+* See [BENCHMARKS.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/BENCHMARKS.md) for formal benchmarking protocols, quality guardrails ($\Delta\text{PPL}$), and full cross-fabric wire latency projections.
+
+---
+
 ## Repository Structure
 
+* [SAME_HOST_BENCHMARKS.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/SAME_HOST_BENCHMARKS.md): Ground-truth empirical measurements on live A100 + RTX 3090 silicon, container networking reality, and isolated kernel timings.
+* [BENCHMARKS.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/BENCHMARKS.md): Formal validation protocol, statistical standards, quality guardrails, and cross-fabric analytical projections.
 * [ARCHITECTURE.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/ARCHITECTURE.md): Progressive architectural decisions and deep-dive technical specs.
 * [TRADEOFFS.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/TRADEOFFS.md): Explicit record of design trade-offs, rejected alternatives, and rationale.
-* [BENCHMARKS.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/BENCHMARKS.md): Local mock simulations vs. real GPU cluster benchmark runs.
 * [docs/UPSTREAM_RFC.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/docs/UPSTREAM_RFC.md): Formal proposal for vLLM / SGLang communities.
 * [docs/TECHNICAL_REPORT.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/docs/TECHNICAL_REPORT.md): Comprehensive staff-level engineering report.
 * [configs/hardware/](file:///Users/aravindsundaresan/Development/HeteroDisagg/configs/hardware/): Reference hardware specifications for modern accelerators.
@@ -129,5 +157,6 @@ hetero-plan generate --cluster l40s_and_3090.json --model llama-3-8b --engine sg
 * `hetero_prof/`: Phase 1 profiler, hardware detector, and roofline analysis engine.
 * `hetero_kv/`: Phase 2 asymmetric KV re-sharding connector with in-flight FP8 quantization.
 * `hetero_policy/`: Phase 3 hardware-adaptive engine adapter and cluster placement planner.
-* `scripts/`: Benchmark and demonstration runners.
+* `scripts/`: Benchmark, profiling, and demonstration runners.
+* `benchmarks/`: Raw empirical JSON sweep traces and run logs.
 * `tests/`: Automated unit and integration test suite.
