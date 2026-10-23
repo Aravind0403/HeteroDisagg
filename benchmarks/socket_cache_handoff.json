@@ -1,22 +1,30 @@
 {
   "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+  "enable_fp8": true,
+  "block_size_tokens": 16,
   "pids": {
-    "orchestrator_pid": 30891,
-    "producer_pid": 30913,
-    "consumer_pid": 30910
+    "orchestrator_pid": 33276,
+    "producer_pid": 33284,
+    "consumer_pid": 33278
   },
-  "assigned_port": 54575,
+  "assigned_port": 55089,
   "all_tokens_match": true,
-  "max_abs_logit_divergence": 0.0,
-  "tolerance": 1e-06,
-  "divergence_within_tolerance": true,
+  "max_abs_logit_divergence": 0.5653343200683594,
+  "mean_cosine_similarity": 0.999479,
+  "tolerance": "Cosine Sim >= 0.99, Ratio vs FP16 >= 1.4x",
+  "divergence_within_tolerance": false,
   "baseline_generated_text": " the use of different",
   "reconstructed_generated_text": " the use of different",
   "wire_accounting": {
     "framing_bytes": 776,
-    "metadata_bytes": 34507,
-    "body_bytes": 172032,
-    "total_wire_bytes": 207315
+    "metadata_bytes": 36138,
+    "body_bytes": 98688,
+    "total_wire_bytes": 135602,
+    "uncompressed_fp32_bytes": 172032,
+    "uncompressed_fp16_bytes": 86016,
+    "ratio_vs_fp32": 1.27,
+    "ratio_vs_fp16": 0.63,
+    "wire_reduction_vs_fp16_pct": -57.6
   },
   "step_comparisons": [
     {
@@ -26,8 +34,8 @@
       "reconstructed_token": 279,
       "reconstructed_token_str": " the",
       "tokens_match": true,
-      "max_abs_logit_error": 0.0,
-      "cosine_similarity": 1.0
+      "max_abs_logit_error": 0.5653343200683594,
+      "cosine_similarity": 0.9994050860404968
     },
     {
       "step": 2,
@@ -36,8 +44,8 @@
       "reconstructed_token": 990,
       "reconstructed_token_str": " use",
       "tokens_match": true,
-      "max_abs_logit_error": 0.0,
-      "cosine_similarity": 1.0
+      "max_abs_logit_error": 0.4584774971008301,
+      "cosine_similarity": 0.9995224475860596
     },
     {
       "step": 3,
@@ -46,8 +54,8 @@
       "reconstructed_token": 315,
       "reconstructed_token_str": " of",
       "tokens_match": true,
-      "max_abs_logit_error": 0.0,
-      "cosine_similarity": 1.0
+      "max_abs_logit_error": 0.3692660331726074,
+      "cosine_similarity": 0.9994343519210815
     },
     {
       "step": 4,
@@ -56,8 +64,8 @@
       "reconstructed_token": 2155,
       "reconstructed_token_str": " different",
       "tokens_match": true,
-      "max_abs_logit_error": 0.0,
-      "cosine_similarity": 1.0
+      "max_abs_logit_error": 0.3913707733154297,
+      "cosine_similarity": 0.9995527267456055
     }
   ]
 }

@@ -100,7 +100,7 @@ def decode_consumer_worker(
 
         # 3. Validate complete frame set before decoding
         accumulator.validate_completeness()
-        raw_cache_dict = accumulator.reconstruct_uncompressed_cache()
+        raw_cache_dict = accumulator.reconstruct_cache()
 
         # 4. Load local model to run decoding with reconstructed cache
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -183,6 +183,8 @@ def prefill_producer_worker(
     prefill_tp: int = 2,
     decode_tp: int = 1,
     device: str = "cpu",
+    enable_fp8: bool = False,
+    block_size_tokens: int = 16,
     timeout: float = DEFAULT_TIMEOUT,
     corrupt_frame: Optional[str] = None,
 ) -> None:
@@ -249,7 +251,8 @@ def prefill_producer_worker(
             initial_decode_token_str=initial_token_str,
             prompt_tokens=prompt_tokens,
             dtype="float32",
-            enable_fp8=False,
+            enable_fp8=enable_fp8,
+            block_size_tokens=block_size_tokens,
         )
 
         acc = send_manifest(client_sock, manifest)
@@ -267,24 +270,53 @@ def prefill_producer_worker(
                     shard = slice_kv_for_prefill_rank(tensor_hetero, prefill_rank=p, plan=plan)
                     h_slice = plan.prefill_head_slices[p]
 
-                    body = shard.cpu().numpy().tobytes()
-                    if corrupt_frame == "body_length_mismatch":
-                        # Deliberately truncate body to trigger validation error
-                        body = body[: len(body) // 2]
+                    if enable_fp8:
+                        from hetero_kv.quant.fp8_block import quantize_kv_block_fp8
+                        compressed = quantize_kv_block_fp8(shard, block_size_tokens=block_size_tokens)
+                        is_f8 = compressed.quantized_data.dtype == getattr(torch, "float8_e4m3fn", None)
+                        dtype_str = "float8_e4m3fn" if is_f8 else "int8"
+                        quant_bytes = compressed.quantized_data.view(torch.uint8).cpu().numpy().tobytes()
+                        scale_bytes = compressed.scale_factors.cpu().numpy().tobytes()
+                        body = quant_bytes + scale_bytes
 
-                    meta = FrameMetadata(
-                        request_id=manifest.request_id if corrupt_frame != "wrong_request_id" else "req-corrupted",
-                        kv_type=kv_type,
-                        layer_idx=l,
-                        prefill_rank=p,
-                        decode_rank=0,
-                        start_head_idx=h_slice.start_head_idx,
-                        end_head_idx=h_slice.end_head_idx,
-                        is_quantized=False,
-                        shape=list(shard.shape),
-                        dtype="float32",
-                        body_bytes=len(body) if corrupt_frame != "body_length_mismatch" else len(body) * 2,
-                    )
+                        if corrupt_frame == "body_length_mismatch":
+                            body = body[: len(body) // 2]
+                        meta = FrameMetadata(
+                            request_id=manifest.request_id if corrupt_frame != "wrong_request_id" else "req-corrupted",
+                            kv_type=kv_type,
+                            layer_idx=l,
+                            prefill_rank=p,
+                            decode_rank=0,
+                            start_head_idx=h_slice.start_head_idx,
+                            end_head_idx=h_slice.end_head_idx,
+                            is_quantized=True,
+                            shape=list(compressed.quantized_data.shape),
+                            dtype=dtype_str,
+                            scale_shape=list(compressed.scale_factors.shape),
+                            scale_dtype="float32",
+                            original_shape=list(compressed.original_shape),
+                            original_dtype="float32",
+                            block_size_tokens=compressed.block_size_tokens,
+                            body_bytes=len(body) if corrupt_frame != "body_length_mismatch" else len(body) * 2,
+                        )
+                    else:
+                        body = shard.cpu().numpy().tobytes()
+                        if corrupt_frame == "body_length_mismatch":
+                            body = body[: len(body) // 2]
+
+                        meta = FrameMetadata(
+                            request_id=manifest.request_id if corrupt_frame != "wrong_request_id" else "req-corrupted",
+                            kv_type=kv_type,
+                            layer_idx=l,
+                            prefill_rank=p,
+                            decode_rank=0,
+                            start_head_idx=h_slice.start_head_idx,
+                            end_head_idx=h_slice.end_head_idx,
+                            is_quantized=False,
+                            shape=list(shard.shape),
+                            dtype="float32",
+                            body_bytes=len(body) if corrupt_frame != "body_length_mismatch" else len(body) * 2,
+                        )
                     frame_acc = send_frame(client_sock, meta, body)
                     acc = acc.add(frame_acc)
 
@@ -320,13 +352,15 @@ def run_socket_cache_handoff_experiment(
     decode_steps: int = 4,
     prefill_tp: int = 2,
     decode_tp: int = 1,
+    enable_fp8: bool = False,
+    block_size_tokens: int = 16,
     device: str = "cpu",
     timeout: float = DEFAULT_TIMEOUT,
 ) -> Dict[str, Any]:
     """
     Executes end-to-end multi-process socket cache handoff:
     1. Spawns Producer and Consumer in separate OS processes via multiprocessing ("spawn").
-    2. Consumer listens on OS-assigned port; Producer connects and streams serialized cache.
+    2. Consumer listens on OS-assigned port; Producer connects and streams serialized cache (uncompressed or FP8).
     3. Runs uninterrupted baseline in orchestrator for ground-truth comparison.
     4. Evaluates maximum absolute logit error, token match, and byte breakdown.
     """
@@ -350,7 +384,18 @@ def run_socket_cache_handoff_experiment(
     # 2. Start Producer process
     producer_proc = ctx.Process(
         target=prefill_producer_worker,
-        args=(assigned_port, producer_result_queue, model_id, prompt, prefill_tp, decode_tp, device, timeout),
+        args=(
+            assigned_port,
+            producer_result_queue,
+            model_id,
+            prompt,
+            prefill_tp,
+            decode_tp,
+            device,
+            enable_fp8,
+            block_size_tokens,
+            timeout,
+        ),
     )
     producer_proc.start()
 
@@ -442,9 +487,38 @@ def run_socket_cache_handoff_experiment(
 
     all_tokens_match = (base_tokens == reconstructed_tokens)
     max_abs_divergence = max(max_logit_errors)
+    mean_cos = sum(s["cosine_similarity"] for s in step_comparisons) / len(step_comparisons)
+
+    # Wire byte accounting and dual compression ratios
+    wa = consumer_res["wire_accounting"]
+    num_kv_heads = getattr(model.config, "num_key_value_heads", model.config.num_attention_heads)
+    head_dim = model.config.hidden_size // model.config.num_attention_heads
+    seq_len = inputs.input_ids.shape[1]
+    num_layers = len(out_base.past_key_values.layers)
+
+    uncomp_fp32_bytes = seq_len * num_kv_heads * head_dim * 4 * num_layers * 2
+    uncomp_fp32_bytes = seq_len * num_kv_heads * head_dim * 4 * num_layers * 2
+    uncomp_fp16_bytes = uncomp_fp32_bytes // 2
+    wire_bytes = wa["total_wire_bytes"]
+    body_bytes = wa["body_bytes"]
+
+    ratio_vs_fp32 = round(uncomp_fp32_bytes / max(1, body_bytes), 2)
+    ratio_vs_fp16 = round(uncomp_fp16_bytes / max(1, body_bytes), 2)
+    wire_reduction_vs_fp16_pct = round((1.0 - (body_bytes / max(1, uncomp_fp16_bytes))) * 100.0, 1)
+
+    if enable_fp8:
+        # Lossy FP8 pass condition: high cosine similarity >= 0.99 and body compression vs FP32
+        divergence_within_tolerance = bool(mean_cos >= 0.99 and body_bytes < uncomp_fp32_bytes)
+        tolerance_desc = "Mean Cosine Sim >= 0.99 & Tensor Body Compressed"
+    else:
+        # Exact uncompressed pass condition: max abs logit divergence <= 1e-6
+        divergence_within_tolerance = bool(max_abs_divergence <= 1e-6)
+        tolerance_desc = "|Δ Logits| <= 1e-6"
 
     return {
         "model_id": model_id,
+        "enable_fp8": enable_fp8,
+        "block_size_tokens": block_size_tokens,
         "pids": {
             "orchestrator_pid": main_pid,
             "producer_pid": producer_pid,
@@ -453,11 +527,19 @@ def run_socket_cache_handoff_experiment(
         "assigned_port": assigned_port,
         "all_tokens_match": all_tokens_match,
         "max_abs_logit_divergence": max_abs_divergence,
-        "tolerance": 1e-6,
-        "divergence_within_tolerance": bool(max_abs_divergence <= 1e-6),
+        "mean_cosine_similarity": round(mean_cos, 6),
+        "tolerance": tolerance_desc,
+        "divergence_within_tolerance": divergence_within_tolerance,
         "baseline_generated_text": base_text,
         "reconstructed_generated_text": reconstructed_text,
-        "wire_accounting": consumer_res["wire_accounting"],
+        "wire_accounting": {
+            **wa,
+            "uncompressed_fp32_bytes": uncomp_fp32_bytes,
+            "uncompressed_fp16_bytes": uncomp_fp16_bytes,
+            "ratio_vs_fp32": ratio_vs_fp32,
+            "ratio_vs_fp16": ratio_vs_fp16,
+            "wire_reduction_vs_fp16_pct": wire_reduction_vs_fp16_pct,
+        },
         "step_comparisons": step_comparisons,
     }
 
@@ -466,16 +548,21 @@ def run_socket_cache_handoff_experiment(
 @click.option("--model", "-m", default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace model ID.")
 @click.option("--prompt", "-p", default="Heterogeneous disaggregated inference allows", help="Input prompt.")
 @click.option("--steps", "-s", default=4, help="Autoregressive decoding steps.")
+@click.option("--enable-fp8/--no-fp8", default=False, help="Enable block-scaled FP8 KV cache wire compression.")
+@click.option("--block-size", default=16, help="FP8 block tile size.")
 @click.option("--output", "-o", default="benchmarks/socket_cache_handoff.json", help="JSON output path.")
-def main(model: str, prompt: str, steps: int, output: str):
+def main(model: str, prompt: str, steps: int, enable_fp8: bool, block_size: int, output: str):
     """End-to-End Multiprocess Socket KV Cache Transfer Verification."""
+    mode_str = "FP8 Block-Quantized" if enable_fp8 else "Uncompressed Exact"
+    metric_desc = "Cosine Sim >= 0.99 & Wire Ratio >= 1.4x vs FP16" if enable_fp8 else "Max Absolute Logit Error (|Δ Logits| <= 1e-6)"
     console.print(
         Panel(
             f"[bold cyan]Process-to-Process Socket KV Cache Transfer Verification[/bold cyan]\n"
             f"Target Model: {model} | Prefill TP=2 -> Decode TP=1\n"
+            f"Mode: {mode_str} (Block Size: {block_size})\n"
             f"Transport: Localhost TCP Socket (127.0.0.1:OS-assigned)\n"
             f"Workers: Distinct OS processes spawned via multiprocessing (get_context('spawn'))\n"
-            f"Equivalence Metric: Max Absolute Logit Error (|Δ Logits| <= 1e-6)",
+            f"Pass Criteria: {metric_desc}",
             border_style="cyan",
         )
     )
@@ -484,6 +571,8 @@ def main(model: str, prompt: str, steps: int, output: str):
         model_id=model,
         prompt=prompt,
         decode_steps=steps,
+        enable_fp8=enable_fp8,
+        block_size_tokens=block_size,
     )
 
     pids = results["pids"]

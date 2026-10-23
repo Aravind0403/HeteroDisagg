@@ -83,6 +83,39 @@ def test_end_to_end_multiprocess_socket_handoff():
     assert wa["total_wire_bytes"] == wa["framing_bytes"] + wa["metadata_bytes"] + wa["body_bytes"]
 
 
+def test_multiprocess_socket_fp8_cache_handoff():
+    """
+    Phase 3 Acceptance:
+    - Multi-process socket handoff with block-scaled FP8 wire compression.
+    - Preserves high token-level logit correlation (mean cosine >= 0.99).
+    - Achieves significant payload reduction vs FP32 and FP16 baselines on complete blocks.
+    """
+    prompt = "Distributed inference engines disaggregate prefill and decode stages to eliminate memory bandwidth"
+    results = run_socket_cache_handoff_experiment(
+        model_id="Qwen/Qwen2.5-0.5B-Instruct",
+        prompt=prompt,
+        decode_steps=4,
+        prefill_tp=2,
+        decode_tp=1,
+        enable_fp8=True,
+        block_size_tokens=16,
+        device="cpu",
+        timeout=30.0,
+    )
+
+    pids = results["pids"]
+    assert len({pids["orchestrator_pid"], pids["producer_pid"], pids["consumer_pid"]}) == 3
+
+    assert results["divergence_within_tolerance"] is True
+    assert results["mean_cosine_similarity"] >= 0.99
+    assert results["all_tokens_match"] is True
+
+    wa = results["wire_accounting"]
+    assert wa["body_bytes"] < wa["uncompressed_fp32_bytes"]
+    assert wa["ratio_vs_fp16"] >= 1.4
+    assert wa["ratio_vs_fp32"] >= 2.5
+
+
 def test_stalled_transfer_deadline_timeout():
     """Receiver must time out rather than hanging indefinitely on an open stalled socket."""
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

@@ -31,6 +31,8 @@ from dataclasses import dataclass, asdict
 from typing import Dict, Any, List, Tuple, Optional, Set
 import torch
 
+from hetero_kv.quant.fp8_block import FP8BlockPayload, dequantize_kv_block_fp8
+
 MAGIC_MANIFEST = b"HKVM"
 MAGIC_FRAME = b"HKVF"
 
@@ -42,6 +44,7 @@ DTYPE_BYTE_SIZES = {
     "float32": 4,
     "float16": 2,
     "bfloat16": 2,
+    "float8_e4m3fn": 1,
     "int8": 1,
     "uint8": 1,
 }
@@ -50,6 +53,7 @@ TORCH_DTYPE_MAP = {
     "float32": torch.float32,
     "float16": torch.float16,
     "bfloat16": torch.bfloat16,
+    "float8_e4m3fn": getattr(torch, "float8_e4m3fn", torch.int8),
     "int8": torch.int8,
     "uint8": torch.uint8,
 }
@@ -187,9 +191,6 @@ class FrameMetadata:
             raise FrameValidationError(
                 f"Invalid head range: [{self.start_head_idx}, {self.end_head_idx}]"
             )
-        if self.body_bytes <= 0 or self.body_bytes > MAX_PAYLOAD_BYTES:
-            raise FrameValidationError(f"Invalid body_bytes: {self.body_bytes}")
-
         # Strict body length calculation validation
         if not self.is_quantized:
             if self.dtype not in DTYPE_BYTE_SIZES:
@@ -205,6 +206,26 @@ class FrameMetadata:
                 raise FrameValidationError(
                     f"Frame body_bytes ({self.body_bytes}) does not match shape ({self.shape}) "
                     f"and dtype ({self.dtype}) expected bytes ({expected_bytes})"
+                )
+        else:
+            if not self.scale_shape or not self.scale_dtype or not self.original_shape or not self.original_dtype:
+                raise FrameValidationError("Missing required FP8 scale or shape metadata for quantized frame")
+            quant_elem_size = DTYPE_BYTE_SIZES.get(self.dtype, 1)
+            quant_numel = 1
+            for d in self.shape:
+                quant_numel *= d
+            quant_bytes = quant_numel * quant_elem_size
+
+            scale_elem_size = DTYPE_BYTE_SIZES.get(self.scale_dtype, 4)
+            scale_numel = 1
+            for d in self.scale_shape:
+                scale_numel *= d
+            scale_bytes = scale_numel * scale_elem_size
+
+            expected_bytes = quant_bytes + scale_bytes
+            if self.body_bytes != expected_bytes:
+                raise FrameValidationError(
+                    f"Quantized frame body_bytes ({self.body_bytes}) does not match quant + scale expected bytes ({expected_bytes})"
                 )
 
 
@@ -396,9 +417,10 @@ class KVCacheFrameAccumulator:
                             f"Missing frame for layer={l}, kv_type='{kv}', prefill_rank={p}"
                         )
 
-    def reconstruct_uncompressed_cache(self) -> Dict[str, List[torch.Tensor]]:
+    def reconstruct_cache(self) -> Dict[str, List[torch.Tensor]]:
         """
         Reassemble received frame bodies into complete per-layer K and V tensors.
+        Handles both uncompressed floating-point and block-scaled FP8 quantized frames.
         Returns dict with 'keys' and 'values' lists of shape [batch, num_kv_heads, seq_len, head_dim].
         """
         self.validate_completeness()
@@ -420,9 +442,33 @@ class KVCacheFrameAccumulator:
 
                 shards = []
                 for meta, body in layer_frames:
-                    # Parse tensor from contiguous buffer
-                    t = torch.frombuffer(bytearray(body), dtype=dtype).view(meta.shape)
-                    shards.append(t)
+                    if meta.is_quantized:
+                        quant_elem_size = DTYPE_BYTE_SIZES.get(meta.dtype, 1)
+                        quant_numel = 1
+                        for d in meta.shape:
+                            quant_numel *= d
+                        quant_bytes = quant_numel * quant_elem_size
+                        quant_buf = bytearray(body[:quant_bytes])
+                        scale_buf = bytearray(body[quant_bytes:])
+
+                        target_dtype = TORCH_DTYPE_MAP[meta.dtype]
+                        raw_uint8 = torch.frombuffer(quant_buf, dtype=torch.uint8).view(meta.shape)
+                        quant_tensor = raw_uint8.view(target_dtype) if target_dtype != torch.uint8 else raw_uint8
+                        scale_tensor = torch.frombuffer(scale_buf, dtype=TORCH_DTYPE_MAP[meta.scale_dtype]).view(meta.scale_shape)
+
+                        payload = FP8BlockPayload(
+                            quantized_data=quant_tensor,
+                            scale_factors=scale_tensor,
+                            original_shape=tuple(meta.original_shape),
+                            original_dtype=TORCH_DTYPE_MAP[meta.original_dtype],
+                            block_size_tokens=meta.block_size_tokens,
+                        )
+                        restored_t = dequantize_kv_block_fp8(payload)
+                        shards.append(restored_t)
+                    else:
+                        # Parse tensor from contiguous buffer
+                        t = torch.frombuffer(bytearray(body), dtype=dtype).view(meta.shape)
+                        shards.append(t)
 
                 # Concatenate along head dimension (dim -2 in Hetero format [B, S, H, D])
                 full_hetero = torch.cat(shards, dim=-2)
@@ -435,3 +481,7 @@ class KVCacheFrameAccumulator:
                     vals_by_layer.append(full_hf)
 
         return {"keys": keys_by_layer, "values": vals_by_layer}
+
+    def reconstruct_uncompressed_cache(self) -> Dict[str, List[torch.Tensor]]:
+        """Backwards compatibility alias for reconstruct_cache."""
+        return self.reconstruct_cache()
