@@ -13,11 +13,21 @@
   "all_tokens_match": true,
   "baseline_generated_text": " the use of different models",
   "reconstructed_generated_text": " the use of different models",
+  "reproducibility": {
+    "methodology": "empirical_validation",
+    "parallelism_type": "in_process_logical_head_partitioning",
+    "primary_metric": "max_abs_logit_error",
+    "tolerance_max_abs_logit_error": 1e-06,
+    "torch_version": "2.10.0",
+    "transformers_version": "5.5.0",
+    "dtype": "float32",
+    "checkpoint_commit_hash": "7ae557604adf67be50417f59c2c2f167def9a775"
+  },
   "step_results": [
     {
       "step": 1,
       "max_abs_logit_diff": 0.0,
-      "cosine_similarity": 1.0000146627426147,
+      "cosine_similarity": 1.0,
       "baseline_token_id": 279,
       "baseline_token_str": " the",
       "reconstructed_token_id": 279,
@@ -27,7 +37,7 @@
     {
       "step": 2,
       "max_abs_logit_diff": 0.0,
-      "cosine_similarity": 1.0000042915344238,
+      "cosine_similarity": 1.0,
       "baseline_token_id": 990,
       "baseline_token_str": " use",
       "reconstructed_token_id": 990,
@@ -37,7 +47,7 @@
     {
       "step": 3,
       "max_abs_logit_diff": 0.0,
-      "cosine_similarity": 1.0000026226043701,
+      "cosine_similarity": 1.0,
       "baseline_token_id": 315,
       "baseline_token_str": " of",
       "reconstructed_token_id": 315,
@@ -47,7 +57,7 @@
     {
       "step": 4,
       "max_abs_logit_diff": 0.0,
-      "cosine_similarity": 1.0000184774398804,
+      "cosine_similarity": 1.0,
       "baseline_token_id": 2155,
       "baseline_token_str": " different",
       "reconstructed_token_id": 2155,
@@ -57,7 +67,7 @@
     {
       "step": 5,
       "max_abs_logit_diff": 0.0,
-      "cosine_similarity": 1.0000141859054565,
+      "cosine_similarity": 1.0,
       "baseline_token_id": 4119,
       "baseline_token_str": " models",
       "reconstructed_token_id": 4119,

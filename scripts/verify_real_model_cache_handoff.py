@@ -18,6 +18,7 @@ import time
 from typing import Dict, Any, List, Tuple
 import click
 import torch
+import transformers
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -46,10 +47,18 @@ def run_cache_handoff_experiment(
     Execute end-to-end real-model cache handoff and logit equivalence experiment:
     1. Run prefill on prompt using small local LLM.
     2. Extract actual K and V caches for all transformer layers.
-    3. Partition across prefill ranks, package uncompressed payloads, and reassemble on decode rank.
+    3. Partition across prefill ranks (logical head slicing in-process), package uncompressed payloads,
+       and reassemble on decode rank 0.
     4. Continue decoding using the reconstructed cache.
     5. Compare step-by-step next-token logits against uninterrupted baseline inference.
     """
+    if decode_tp != 1:
+        raise ValueError(
+            f"Unsupported decode_tp={decode_tp}. In-process model forwarding currently reconstructs "
+            f"rank 0 into the local model. Multi-rank decode tensor parallelism across separate "
+            f"processes/nodes is an upcoming distributed systems milestone. Use decode_tp=1 for local verification."
+        )
+
     dev = torch.device(device)
     console.print(f"[dim]Loading model '{model_id}' on {device}...[/dim]")
     tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -223,7 +232,8 @@ def run_cache_handoff_experiment(
         max_diff = torch.max(torch.abs(logits_b - logits_r)).item()
         max_divergence_overall = max(max_divergence_overall, max_diff)
 
-        cos_sim = torch.cosine_similarity(logits_b.flatten(), logits_r.flatten(), dim=0).item()
+        raw_cos = torch.cosine_similarity(logits_b.flatten(), logits_r.flatten(), dim=0).item()
+        cos_sim = max(-1.0, min(1.0, float(raw_cos)))
         tok_b = baseline_step_tokens[step]
         tok_r = reconstructed_step_tokens[step]
         tok_str_b = tokenizer.decode([tok_b])
@@ -261,6 +271,16 @@ def run_cache_handoff_experiment(
         "all_tokens_match": all_tokens_match,
         "baseline_generated_text": baseline_generation,
         "reconstructed_generated_text": reconstructed_generation,
+        "reproducibility": {
+            "methodology": "empirical_validation",
+            "parallelism_type": "in_process_logical_head_partitioning",
+            "primary_metric": "max_abs_logit_error",
+            "tolerance_max_abs_logit_error": 1e-6,
+            "torch_version": torch.__version__,
+            "transformers_version": getattr(transformers, "__version__", "unknown"),
+            "dtype": "float32",
+            "checkpoint_commit_hash": getattr(model.config, "_commit_hash", None),
+        },
         "step_results": step_results,
     }
 
@@ -273,12 +293,13 @@ def run_cache_handoff_experiment(
 @click.option("--decode-tp", default=1, help="Decode tensor-parallel degree.")
 @click.option("--output", "-o", default=None, help="JSON output file for results.")
 def main(model: str, prompt: str, steps: int, prefill_tp: int, decode_tp: int, output: str):
-    """Gate 2 Verification: Real-Model Cache Handoff & Logit Equivalence."""
+    """Gate 2 Empirical Validation: Real-Model Cache Handoff & Logit Equivalence."""
     console.print(
         Panel(
-            f"[bold cyan]Gate 2: Real-Model Cache Handoff Correctness[/bold cyan]\n"
+            f"[bold cyan]Gate 2: Real-Model Cache Handoff Empirical Validation[/bold cyan]\n"
             f"Target Model: {model}\n"
-            f"Architecture: Prefill TP={prefill_tp} -> Decode TP={decode_tp} (Asymmetric Disaggregation)\n"
+            f"Architecture: Prefill TP={prefill_tp} -> Decode TP={decode_tp} (In-Process Logical Head Partitioning)\n"
+            f"Primary Metric: Max Absolute Logit Error (|Δ Logits| <= 1e-6)\n"
             f"Decoding Horizon: {steps} autoregressive steps",
             border_style="cyan",
         )
@@ -308,7 +329,7 @@ def main(model: str, prompt: str, steps: int, prefill_tp: int, decode_tp: int, o
             f"'{r['reconstructed_token_str']}' ({r['reconstructed_token_id']})",
             status,
             f"{r['max_abs_logit_diff']:.2e}",
-            f"{r['cosine_similarity']:.7f}",
+            f"{r['cosine_similarity']:.6f}",
         )
 
     console.print(table)
@@ -317,13 +338,14 @@ def main(model: str, prompt: str, steps: int, prefill_tp: int, decode_tp: int, o
         f"[bold]Cache Tensor Reassembly Error:[/bold]\n"
         f"  Max Key Cache Diff: {results['max_k_cache_diff']:.2e}\n"
         f"  Max Value Cache Diff: {results['max_v_cache_diff']:.2e}\n\n"
-        f"[bold]Overall Logits Equivalence:[/bold]\n"
-        f"  Max Logit Divergence: [bold green]{results['max_logit_divergence_overall']:.2e}[/bold green]\n"
+        f"[bold]Overall Logits Equivalence (Primary Metric):[/bold]\n"
+        f"  Max Absolute Logit Error: [bold green]{results['max_logit_divergence_overall']:.2e}[/bold green]\n"
         f"  All Tokens Match: {'[bold green]YES (100% Exact)[/bold green]' if results['all_tokens_match'] else '[bold red]NO[/bold red]'}\n\n"
         f"[bold]Generated Continuations:[/bold]\n"
         f"  Baseline:      \"{results['baseline_generated_text']}\"\n"
-        f"  Reconstructed: \"{results['reconstructed_generated_text']}\"",
-        title="Gate 2 Proof of Cache Correctness",
+        f"  Reconstructed: \"{results['reconstructed_generated_text']}\"\n\n"
+        f"[dim]Note: Logical head partitioning inside one process; worker-to-worker transport is a separate systems milestone.[/dim]",
+        title="Gate 2 Empirical Cache Handoff Validation",
         border_style="green" if results["all_tokens_match"] else "red",
     )
     console.print(summary_panel)

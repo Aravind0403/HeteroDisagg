@@ -1,0 +1,71 @@
+{
+  "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+  "block_size_tokens": 16,
+  "torch_version": "2.10.0",
+  "transformers_version": "5.5.0",
+  "dtype": "float32",
+  "checkpoint_commit_hash": "7ae557604adf67be50417f59c2c2f167def9a775",
+  "summary": {
+    "avg_delta_nll": 0.0017,
+    "avg_top1_agreement_pct": 85.5,
+    "avg_top5_overlap_pct": 91.1,
+    "avg_cosine_similarity": 0.98458,
+    "avg_compression_ratio": 3.24
+  },
+  "passages": [
+    {
+      "context_length": 12,
+      "target_tokens": 14,
+      "uncompressed_bytes": 294912,
+      "wire_bytes": 98688,
+      "compression_ratio": 2.99,
+      "nll_uncompressed": 5.6176,
+      "nll_fp8": 5.6244,
+      "delta_nll": 0.0068,
+      "ppl_uncompressed": 275.21,
+      "ppl_fp8": 277.1,
+      "delta_ppl": 1.89,
+      "top1_agreement_pct": 85.7,
+      "top5_overlap_pct": 90.0,
+      "mean_logit_cosine_similarity": 0.98576,
+      "mean_absolute_logit_error": 0.2233,
+      "category": "Systems & Distributed ML"
+    },
+    {
+      "context_length": 14,
+      "target_tokens": 18,
+      "uncompressed_bytes": 344064,
+      "wire_bytes": 98688,
+      "compression_ratio": 3.49,
+      "nll_uncompressed": 6.4089,
+      "nll_fp8": 6.4015,
+      "delta_nll": -0.0074,
+      "ppl_uncompressed": 607.24,
+      "ppl_fp8": 602.78,
+      "delta_ppl": -4.47,
+      "top1_agreement_pct": 83.3,
+      "top5_overlap_pct": 93.3,
+      "mean_logit_cosine_similarity": 0.99363,
+      "mean_absolute_logit_error": 0.2553,
+      "category": "Algorithmic Reasoning"
+    },
+    {
+      "context_length": 13,
+      "target_tokens": 16,
+      "uncompressed_bytes": 319488,
+      "wire_bytes": 98688,
+      "compression_ratio": 3.24,
+      "nll_uncompressed": 5.4103,
+      "nll_fp8": 5.416,
+      "delta_nll": 0.0057,
+      "ppl_uncompressed": 223.7,
+      "ppl_fp8": 224.98,
+      "delta_ppl": 1.28,
+      "top1_agreement_pct": 87.5,
+      "top5_overlap_pct": 90.0,
+      "mean_logit_cosine_similarity": 0.97436,
+      "mean_absolute_logit_error": 0.3491,
+      "category": "Software Architecture"
+    }
+  ]
+}
