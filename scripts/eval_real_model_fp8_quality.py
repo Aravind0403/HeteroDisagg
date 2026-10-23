@@ -642,6 +642,14 @@ def run_full_fp8_quality_benchmark(
     avg_exact_wire_reduction_fp16 = sum(p["compression"]["exact_wire_reduction_vs_fp16_pct"] for p in passage_results) / n
     avg_estimated_macro_reduction_fp16 = sum(p["compression"]["estimated_macro_average_wire_reduction_vs_fp16_pct"] for p in passage_results) / n
 
+    # Aggregate reduction across summed corpus bytes
+    tot_corpus_wire_fp16 = sum(p["compression"]["exact_wire_bytes_fp16"] for p in passage_results)
+    tot_corpus_wire_fp8 = sum(p["compression"]["exact_wire_bytes_fp8"] for p in passage_results)
+    summed_corpus_wire_reduction_fp16 = (
+        (1.0 - (tot_corpus_wire_fp8 / max(1, tot_corpus_wire_fp16))) * 100.0
+        if tot_corpus_wire_fp16 > 0 else 0.0
+    )
+
     # Check against criteria
     criteria_checks = {
         "delta_nll_passed": bool(abs(avg_cont_delta_nll) <= thresholds["max_delta_nll"]),
@@ -713,6 +721,7 @@ def run_full_fp8_quality_benchmark(
                 "avg_ratio_vs_fp16": round(avg_comp_fp16, 2),
                 "avg_tensor_body_reduction_vs_fp16_pct": round(avg_tensor_reduction_fp16, 1),
                 "avg_exact_wire_reduction_vs_fp16_pct": round(avg_exact_wire_reduction_fp16, 1),
+                "summed_corpus_wire_reduction_vs_fp16_pct": round(summed_corpus_wire_reduction_fp16, 2),
                 "avg_estimated_macro_average_wire_reduction_vs_fp16_pct": round(avg_estimated_macro_reduction_fp16, 1),
                 "avg_total_wire_reduction_vs_fp16_pct": round(avg_exact_wire_reduction_fp16, 1),
                 "avg_wire_reduction_vs_fp16_pct": round(avg_tensor_reduction_fp16, 1),
@@ -817,7 +826,8 @@ def main(model: str, block_size: int, mode: str, output: Optional[str]):
         f"    Max Logit MAE:             [white]{s_worst['max_mean_absolute_logit_error']:.4f}[/white]\n\n"
         f"[bold]Wire & Tensor Compression Ratios (Explicit Denominators):[/bold]\n"
         f"  Relative to in-memory FP32 tensor cache:   [bold green]{s_comp['avg_ratio_vs_fp32']:.2f}x[/bold green]\n"
-        f"  Measured net wire savings (actual serializer headers & framing): [bold green]{s_comp['avg_exact_wire_reduction_vs_fp16_pct']:.1f}% net wire reduction[/bold green]\n"
+        f"  Measured net wire savings (per-passage macro-average): [bold green]{s_comp['avg_exact_wire_reduction_vs_fp16_pct']:.1f}% net wire reduction[/bold green]\n"
+        f"  Measured net wire savings (summed corpus wire bytes):   [bold green]{s_comp.get('summed_corpus_wire_reduction_vs_fp16_pct', 0.0):.2f}% net wire reduction[/bold green]\n"
         f"  Estimated macro-average wire savings (static framing heuristic): [dim]{s_comp['avg_estimated_macro_average_wire_reduction_vs_fp16_pct']:.1f}% estimated[/dim]\n\n"
         f"[bold]Acceptance Status:[/bold] {'[bold green]ALL CRITERIA PASSED[/bold green]' if all_passed else '[bold red]FAILED THRESHOLDS[/bold red]'}\n"
     )

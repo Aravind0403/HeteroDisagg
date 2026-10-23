@@ -59,6 +59,7 @@
       "avg_ratio_vs_fp16": 1.62,
       "avg_tensor_body_reduction_vs_fp16_pct": 38.0,
       "avg_exact_wire_reduction_vs_fp16_pct": 30.4,
+      "summed_corpus_wire_reduction_vs_fp16_pct": 30.57,
       "avg_estimated_macro_average_wire_reduction_vs_fp16_pct": 34.7,
       "avg_total_wire_reduction_vs_fp16_pct": 30.4,
       "avg_wire_reduction_vs_fp16_pct": 38.0,

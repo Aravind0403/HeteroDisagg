@@ -185,7 +185,7 @@ To isolate the physical transport trade-offs independent of model forward passes
 ### C. Exact Serializer Wire Accounting vs. Estimated Framing
 - Because FP8 frames serialize additional metadata fields (`scale_shape`, `scale_dtype`, `original_shape`, `original_dtype`, `block_size_tokens`) compared to uncompressed FP16 frames, exact wire footprints are captured using `ByteCountingSink` with `send_manifest` and `send_frame`.
 - On the held-out expanded evaluation corpus (`benchmarks/expanded_fp8_quality.json`):
-  * **Measured Net Wire Savings (Actual Serializer Framing):** **37.9% net wire reduction**
+  * **Measured Net Wire Savings (Actual Serializer Framing):** **37.9% per-passage macro-average net wire reduction** (**41.85% reduction across summed corpus bytes**)
   * **Estimated Macro-Average Wire Savings (Static Framing Heuristic):** **39.2% estimated reduction**
   * **Pure Tensor-Body Reduction (Excluding Framing):** **40.1% tensor reduction**
 
@@ -193,6 +193,6 @@ To isolate the physical transport trade-offs independent of model forward passes
 - Validated in `tests/test_policy.py::test_policy_against_projected_benchmark_outcomes` using production default configuration `AdaptiveCompressionPolicy()`:
   * **Match Rate:** **30 / 32 cases (93.75%)** match the projected empirical winner.
   * **Mean Per-Case Regret:** **0.0488%** relative to the projected oracle.
-  * **Maximum Single-Case Regret:** **1.147%** (occurring at 1024 tokens on 1 Gbps where codec scaling inverts the winner).
+  * **Maximum Single-Case Regret:** **1.147%** (occurring at 128 tokens on 1 Gbps).
   * **Global Latency:** Total policy latency beats both Always-Compress and Never-Compress baselines across the entire sweep grid.
 

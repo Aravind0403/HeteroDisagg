@@ -88,7 +88,7 @@ def test_policy_against_projected_benchmark_outcomes(policy):
     - Across the 32-case sweep grid (4 bandwidths x 8 sequence lengths):
       * Matches projected optimal mode in exactly 30/32 cases (93.75%).
       * Mean per-case regret vs projected oracle is 0.0488%.
-      * Maximum single-case regret is 1.147% (at 1024 tokens on 1 Gbps where codec scaling reverses the projection).
+      * Maximum single-case regret is 1.147% (at 128 tokens on 1 Gbps).
       * Calibration/evaluation separation note: The benchmark grid serves as an analytical validation
         set; real-world deployment requires runtime link probing.
     """

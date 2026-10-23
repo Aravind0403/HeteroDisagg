@@ -464,7 +464,7 @@ def render_break_even_summary(sweep_data: Dict[str, Any]) -> None:
                 )
         else:
             chart_lines.append(
-                f"  • {bw:<10}: [bold magenta]Never breaks even on CPU[/bold magenta] (interconnect too fast; unvectorized CPU codec overhead dominates)"
+                f"  • {bw:<10}: [bold magenta]No projected win in the tested grid[/bold magenta] (interconnect too fast; unvectorized CPU codec overhead dominates)"
             )
 
     chart_lines.append("\n[bold]Trade-off & Measurement Methodology Breakdown:[/bold]")
@@ -473,7 +473,6 @@ def render_break_even_summary(sweep_data: Dict[str, Any]) -> None:
     chart_lines.append("  2. [bold white]Projected Network Latency[/bold white]: Modeled as Measured Codec Overhead + (Wire Bytes / Target Bandwidth).")
     chart_lines.append("  3. [bold white]Frontier Stability & CPU Scaling[/bold white]: At 1 Gbps, 256 tokens is the first observed projected win, but a slight reversal occurs at 1024 tokens (115.6 ms vs 116.1 ms). This small difference (~0.4%) is consistent with measurement noise or unvectorized CPU quantization scaling; do not claim every larger prompt benefits unconditionally without hardware kernel acceleration.")
     chart_lines.append("  4. [red]Short Prompts (<= 16 tokens)[/red]: FP8 wire bytes expand or offer negligible reduction due to tile padding and framing headers.")
-    chart_lines.append("  5. [green]Bandwidth-Constrained Links (100 Mbps)[/green]: FP8 delivers ~1.9x wire reduction, breaking even consistently for prompts >= 32 tokens.")
 
     console.print(Panel("\n".join(chart_lines), title="Adaptive Policy Break-Even Frontier"))
 
