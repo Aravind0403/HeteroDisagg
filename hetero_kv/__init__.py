@@ -15,6 +15,7 @@ from hetero_kv.reshard import (
     reassemble_decode_kv,
 )
 from hetero_kv.connector import HeteroKVConnector, TransferMetrics, calculate_uncompressed_kv_bytes
+from hetero_kv.policy import AdaptiveCompressionPolicy, CompressionMode, PolicyEvaluationResult
 
 __all__ = [
     "KVHeadSlice",
@@ -32,4 +33,7 @@ __all__ = [
     "HeteroKVConnector",
     "TransferMetrics",
     "calculate_uncompressed_kv_bytes",
+    "AdaptiveCompressionPolicy",
+    "CompressionMode",
+    "PolicyEvaluationResult",
 ]

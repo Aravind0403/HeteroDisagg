@@ -63,6 +63,55 @@ BENCHMARK_CORPUS = [
     },
 ]
 
+# Multi-context length held-out evaluation corpus spanning short to long prompt lengths
+EXPANDED_BENCHMARK_CORPUS = [
+    {
+        "category": "Systems & Prefill (~16 tok)",
+        "context": "Distributed inference engines disaggregate prefill and decode stages to eliminate memory bandwidth interference and maximize compute saturation across heterogeneous clusters.",
+        "target": " By decoupling compute-bound prefill from memory-bound decode, clusters achieve near-optimal throughput and bounded latency.",
+    },
+    {
+        "category": "Quantization Math (~32 tok)",
+        "context": "Block-scaled quantization divides floating point activation tensors into contiguous tiles, computing a local maximum absolute scale factor for each block to minimize roundoff error while preserving dynamic numerical range across outliers.",
+        "target": " When applied to key and value caches, block scaling bounds precision loss to isolated head dimensions.",
+    },
+    {
+        "category": "Distributed Consensus (~64 tok)",
+        "context": (
+            "In distributed consensus protocols such as Raft and Paxos, replica state machines maintain identical execution histories "
+            "by appending log entries proposed by an elected leader. When network partitions isolate the leader from a quorum, the cluster "
+            "must prevent split-brain anomalies by rejecting uncommitted transitions and electing a successor with the highest term and index."
+        ),
+        "target": " This ensures linearizable consistency across write operations while allowing healthy minor partitions to continue serving reads.",
+    },
+    {
+        "category": "Compiler Infrastructure (~128 tok)",
+        "context": (
+            "Modern deep learning compilers lower high-level computation graphs into intermediate representations to perform target-independent "
+            "optimizations such as dead code elimination, constant folding, and operator fusion. During loop tiling and polyhedral scheduling, "
+            "the compiler restructures nested iteration spaces to maximize cache reuse and vectorization efficiency. For tensor processing units, "
+            "register allocation and memory planning must explicitly account for scratchpad memory banking conflicts, asynchronous DMA transfers, "
+            "and systolic array dataflow latency before emitting device assembly code."
+        ),
+        "target": " Kernel fusion reduces memory traffic between off-chip DRAM and on-chip SRAM by keeping intermediate activation tiles resident in registers.",
+    },
+    {
+        "category": "Computer Architecture (~256 tok)",
+        "context": (
+            "Modern multiprocessor memory subsystems rely on hierarchical cache organizations to bridge the widening latency gap between "
+            "fast execution cores and high-capacity dynamic random-access memory. Each processing core incorporates dedicated Level 1 instruction "
+            "and data caches backed by a non-inclusive or inclusive Level 2 cache, which in turn interface with a large, shared Level 3 cache "
+            "connected via a low-latency coherent interconnect fabric. To preserve data consistency across multiple concurrent threads, hardware "
+            "coherence controllers implement snooping or directory-based variants of the MESI protocol, invalidating obsolete cache lines or "
+            "transitioning lines to modified states upon store instructions. When coherence traffic saturates the crossbar or mesh interconnect, "
+            "false sharing and cache thrashing degrade scalable multithreaded performance. Hardware prefetchers monitor memory access patterns "
+            "to prefetch cache lines into lower levels ahead of execution, but irregular stride patterns or pointer-chasing data structures can "
+            "induce severe prefetch pollution, displacing working sets and exacerbating DRAM bandwidth contention."
+        ),
+        "target": " Disaggregated key-value cache architectures alleviate local memory pressure by streaming activations across high-bandwidth RDMA networks.",
+    },
+]
+
 # Executable acceptance criteria shared across CLI, tests, and reporting
 DEFAULT_FP8_THRESHOLDS = {
     "max_delta_nll": 0.05,            # nats (continuation steps)
@@ -340,11 +389,44 @@ def run_full_fp8_quality_benchmark(
     avg_cont_cos = sum(p["continuation_steps"]["mean_logit_cosine_similarity"] for p in passage_results) / n
     avg_cont_mae = sum(p["continuation_steps"]["mean_absolute_logit_error"] for p in passage_results) / n
 
+    # Token-weighted averages across all continuation tokens
+    total_cont_tokens = sum(p["continuation_tokens"] for p in passage_results)
+    weighted_cont_delta_nll = (
+        sum(p["continuation_steps"]["delta_nll"] * p["continuation_tokens"] for p in passage_results) / total_cont_tokens
+        if total_cont_tokens > 0 else 0.0
+    )
+    weighted_cont_top1 = (
+        sum(p["continuation_steps"]["top1_agreement_pct"] * p["continuation_tokens"] for p in passage_results) / total_cont_tokens
+        if total_cont_tokens > 0 else 0.0
+    )
+    weighted_cont_top5 = (
+        sum(p["continuation_steps"]["top5_overlap_pct"] * p["continuation_tokens"] for p in passage_results) / total_cont_tokens
+        if total_cont_tokens > 0 else 0.0
+    )
+    weighted_cont_cos = (
+        sum(p["continuation_steps"]["mean_logit_cosine_similarity"] * p["continuation_tokens"] for p in passage_results) / total_cont_tokens
+        if total_cont_tokens > 0 else 1.0
+    )
+    weighted_cont_mae = (
+        sum(p["continuation_steps"]["mean_absolute_logit_error"] * p["continuation_tokens"] for p in passage_results) / total_cont_tokens
+        if total_cont_tokens > 0 else 0.0
+    )
+
+    # Worst-case metrics across passages
+    worst_case_metrics = {
+        "max_abs_delta_nll": max(abs(p["continuation_steps"]["delta_nll"]) for p in passage_results),
+        "min_top1_agreement_pct": min(p["continuation_steps"]["top1_agreement_pct"] for p in passage_results),
+        "min_top5_overlap_pct": min(p["continuation_steps"]["top5_overlap_pct"] for p in passage_results),
+        "min_cosine_similarity": min(p["continuation_steps"]["mean_logit_cosine_similarity"] for p in passage_results),
+        "max_mean_absolute_logit_error": max(p["continuation_steps"]["mean_absolute_logit_error"] for p in passage_results),
+    }
+
     # Overall averages (including boundary step 0)
-    avg_all_delta_nll = sum(p["overall_sequence"]["delta_nll"] for p in passage_results) / n
-    avg_all_top1 = sum(p["overall_sequence"]["top1_agreement_pct"] for p in passage_results) / n
-    avg_all_top5 = sum(p["overall_sequence"]["top5_overlap_pct"] for p in passage_results) / n
-    avg_all_cos = sum(p["overall_sequence"]["mean_logit_cosine_similarity"] for p in passage_results) / n
+    all_n = len(passage_results)
+    avg_all_delta_nll = sum(p["overall_sequence"]["delta_nll"] for p in passage_results) / all_n
+    avg_all_top1 = sum(p["overall_sequence"]["top1_agreement_pct"] for p in passage_results) / all_n
+    avg_all_top5 = sum(p["overall_sequence"]["top5_overlap_pct"] for p in passage_results) / all_n
+    avg_all_cos = sum(p["overall_sequence"]["mean_logit_cosine_similarity"] for p in passage_results) / all_n
 
     # Compression averages
     avg_comp_fp32 = sum(p["compression"]["ratio_vs_fp32"] for p in passage_results) / n
@@ -362,14 +444,23 @@ def run_full_fp8_quality_benchmark(
     }
     all_passed = bool(all(criteria_checks.values()))
 
-    return {
-        "model_id": model_id,
-        "evaluation_scope": "diagnostic_smoke_test_curated_passages",
-        "scope_disclaimer": (
+    is_expanded = (corpus == EXPANDED_BENCHMARK_CORPUS)
+    eval_scope = "multi_context_length_evaluation" if is_expanded else "diagnostic_smoke_test_curated_passages"
+    scope_disclaimer = (
+        "Multi-context length evaluation across diverse held-out passages (short to 256+ tokens) "
+        "reporting macro-averages, token-weighted aggregates, and worst-case metrics."
+        if is_expanded
+        else (
             "Diagnostic smoke test across 3 curated passages (48 target tokens) designed to verify "
             "evaluator alignment and detect severe quantization degradation. Does not establish "
             "broad LLM benchmark preservation."
-        ),
+        )
+    )
+
+    return {
+        "model_id": model_id,
+        "evaluation_scope": eval_scope,
+        "scope_disclaimer": scope_disclaimer,
         "enable_fp8": enable_fp8,
         "block_size_tokens": block_size,
         "torch_version": torch.__version__,
@@ -386,6 +477,21 @@ def run_full_fp8_quality_benchmark(
                 "avg_top5_overlap_pct": round(avg_cont_top5, 1),
                 "avg_cosine_similarity": round(avg_cont_cos, 5),
                 "avg_mean_absolute_logit_error": round(avg_cont_mae, 4),
+            },
+            "token_weighted_continuation_steps": {
+                "total_continuation_tokens": total_cont_tokens,
+                "weighted_delta_nll": round(weighted_cont_delta_nll, 4),
+                "weighted_top1_agreement_pct": round(weighted_cont_top1, 1),
+                "weighted_top5_overlap_pct": round(weighted_cont_top5, 1),
+                "weighted_cosine_similarity": round(weighted_cont_cos, 5),
+                "weighted_mean_absolute_logit_error": round(weighted_cont_mae, 4),
+            },
+            "worst_case_continuation_steps": {
+                "max_abs_delta_nll": round(worst_case_metrics["max_abs_delta_nll"], 4),
+                "min_top1_agreement_pct": round(worst_case_metrics["min_top1_agreement_pct"], 1),
+                "min_top5_overlap_pct": round(worst_case_metrics["min_top5_overlap_pct"], 1),
+                "min_cosine_similarity": round(worst_case_metrics["min_cosine_similarity"], 5),
+                "max_mean_absolute_logit_error": round(worst_case_metrics["max_mean_absolute_logit_error"], 4),
             },
             "overall_sequence": {
                 "avg_delta_nll": round(avg_all_delta_nll, 4),
@@ -406,15 +512,20 @@ def run_full_fp8_quality_benchmark(
 @click.command()
 @click.option("--model", "-m", default="Qwen/Qwen2.5-0.5B-Instruct", help="HuggingFace model ID.")
 @click.option("--block-size", "-b", default=16, help="FP8 quantization tile block size.")
-@click.option("--output", "-o", default="benchmarks/fp8_real_model_quality.json", help="JSON output file.")
-def main(model: str, block_size: int, output: str):
+@click.option("--mode", type=click.Choice(["smoke", "expanded"]), default="smoke", help="Evaluation mode: curated smoke test (3 passages) or expanded multi-context evaluation.")
+@click.option("--output", "-o", default=None, help="JSON output file.")
+def main(model: str, block_size: int, mode: str, output: Optional[str]):
     """Evaluate FP8 KV Cache Quality on Real Model via Aligned Teacher-Forced NLL."""
     th = DEFAULT_FP8_THRESHOLDS
+    corpus = EXPANDED_BENCHMARK_CORPUS if mode == "expanded" else BENCHMARK_CORPUS
+    if output is None:
+        output = "benchmarks/expanded_fp8_quality.json" if mode == "expanded" else "benchmarks/fp8_real_model_quality.json"
+
     console.print(
         Panel(
-            f"[bold cyan]Real-Model FP8 KV Cache Quality Evaluation (Aligned Diagnostic Smoke Test)[/bold cyan]\n"
+            f"[bold cyan]Real-Model FP8 KV Cache Quality Evaluation ({mode.upper()} MODE)[/bold cyan]\n"
             f"Target Model: {model} | Block Size: {block_size} tokens\n"
-            f"Scope: 3 curated passages (48 target tokens) | Separate boundary vs continuation reporting\n"
+            f"Corpus: {len(corpus)} passages spanning diverse domains and context lengths\n"
             f"Executable Pass Criteria:\n"
             f"  • Continuation ΔNLL <= {th['max_delta_nll']} nats\n"
             f"  • Continuation Top-1 Agreement >= {th['min_top1_agreement_pct']}%\n"
@@ -425,13 +536,14 @@ def main(model: str, block_size: int, output: str):
         )
     )
 
-    results = run_full_fp8_quality_benchmark(model_id=model, block_size=block_size)
+    results = run_full_fp8_quality_benchmark(model_id=model, corpus=corpus, block_size=block_size)
 
     table = Table(
         title="Passage-by-Passage Metrics (Continuation Steps / Positions Attending to Reconstructed Cache)",
         header_style="bold magenta",
     )
-    table.add_column("Category", style="cyan", width=22)
+    table.add_column("Category", style="cyan", width=25)
+    table.add_column("Context", justify="right", style="dim")
     table.add_column("Tokens", justify="right", style="white")
     table.add_column("NLL (Base)", justify="right", style="dim")
     table.add_column("NLL (FP8)", justify="right", style="white")
@@ -448,7 +560,8 @@ def main(model: str, block_size: int, output: str):
         delta_str = f"{cs['delta_nll']:+.4f}"
         table.add_row(
             p["category"],
-            f"{cs['nll_eval']:.2f} ({p['continuation_tokens']})",
+            f"{p['context_length']}",
+            f"{p['continuation_tokens']}",
             f"{cs['nll_uncompressed']:.3f}",
             f"{cs['nll_eval']:.3f}",
             delta_str,
@@ -462,29 +575,41 @@ def main(model: str, block_size: int, output: str):
     console.print(table)
 
     s_cont = results["summary"]["continuation_steps"]
+    s_weighted = results["summary"]["token_weighted_continuation_steps"]
+    s_worst = results["summary"]["worst_case_continuation_steps"]
     s_all = results["summary"]["overall_sequence"]
     s_comp = results["summary"]["compression"]
     all_passed = results["all_criteria_passed"]
 
     summary_content = (
         f"[bold]Continuation Steps Quality (Positions Attending to Reconstructed Cache):[/bold]\n"
-        f"  Average ΔNLL:              [bold green]{s_cont['avg_delta_nll']:+.4f} nats[/bold green] (Threshold: <= {th['max_delta_nll']})\n"
-        f"  Top-1 Greedy Agreement:    [bold cyan]{s_cont['avg_top1_agreement_pct']:.1f}%[/bold cyan] (Threshold: >= {th['min_top1_agreement_pct']}%)\n"
-        f"  Top-5 Distribution Overlap: [bold cyan]{s_cont['avg_top5_overlap_pct']:.1f}%[/bold cyan] (Threshold: >= {th['min_top5_overlap_pct']}%)\n"
-        f"  Logit Cosine Similarity:   [bold yellow]{s_cont['avg_cosine_similarity']:.5f}[/bold yellow] (Threshold: >= {th['min_cosine_similarity']})\n"
-        f"  Mean Absolute Logit Error: [white]{s_cont['avg_mean_absolute_logit_error']:.4f}[/white]\n\n"
-        f"[bold]Overall Sequence Quality (Including Shared Prefill Boundary Step 0):[/bold]\n"
-        f"  Average ΔNLL: {s_all['avg_delta_nll']:+.4f} nats | Top-1: {s_all['avg_top1_agreement_pct']:.1f}% | Cosine: {s_all['avg_cosine_similarity']:.5f}\n\n"
+        f"  [cyan]Macro-Average (Unweighted):[/cyan]\n"
+        f"    Average ΔNLL:              [bold green]{s_cont['avg_delta_nll']:+.4f} nats[/bold green] (Threshold: <= {th['max_delta_nll']})\n"
+        f"    Top-1 Greedy Agreement:    [bold cyan]{s_cont['avg_top1_agreement_pct']:.1f}%[/bold cyan] (Threshold: >= {th['min_top1_agreement_pct']}%)\n"
+        f"    Top-5 Distribution Overlap: [bold cyan]{s_cont['avg_top5_overlap_pct']:.1f}%[/bold cyan] (Threshold: >= {th['min_top5_overlap_pct']}%)\n"
+        f"    Logit Cosine Similarity:   [bold yellow]{s_cont['avg_cosine_similarity']:.5f}[/bold yellow] (Threshold: >= {th['min_cosine_similarity']})\n"
+        f"    Mean Absolute Logit Error: [white]{s_cont['avg_mean_absolute_logit_error']:.4f}[/white]\n\n"
+        f"  [magenta]Token-Weighted Aggregate ({s_weighted['total_continuation_tokens']} tokens):[/magenta]\n"
+        f"    Weighted ΔNLL:             [bold green]{s_weighted['weighted_delta_nll']:+.4f} nats[/bold green]\n"
+        f"    Weighted Top-1 Agreement:  [bold cyan]{s_weighted['weighted_top1_agreement_pct']:.1f}%[/bold cyan]\n"
+        f"    Weighted Top-5 Overlap:    [bold cyan]{s_weighted['weighted_top5_overlap_pct']:.1f}%[/bold cyan]\n"
+        f"    Weighted Cosine Sim:       [bold yellow]{s_weighted['weighted_cosine_similarity']:.5f}[/bold yellow]\n"
+        f"    Weighted Logit MAE:        [white]{s_weighted['weighted_mean_absolute_logit_error']:.4f}[/white]\n\n"
+        f"  [yellow]Worst-Case Passage Metrics:[/yellow]\n"
+        f"    Max |ΔNLL|:                [bold yellow]{s_worst['max_abs_delta_nll']:.4f} nats[/bold yellow]\n"
+        f"    Min Top-1 Agreement:       [bold yellow]{s_worst['min_top1_agreement_pct']:.1f}%[/bold yellow]\n"
+        f"    Min Top-5 Overlap:         [bold yellow]{s_worst['min_top5_overlap_pct']:.1f}%[/bold yellow]\n"
+        f"    Min Cosine Similarity:     [bold yellow]{s_worst['min_cosine_similarity']:.5f}[/bold yellow]\n"
+        f"    Max Logit MAE:             [white]{s_worst['max_mean_absolute_logit_error']:.4f}[/white]\n\n"
         f"[bold]Wire Compression Ratios (Explicit Denominators):[/bold]\n"
         f"  Relative to in-memory FP32 tensor cache:   [bold green]{s_comp['avg_ratio_vs_fp32']:.2f}x[/bold green]\n"
         f"  Relative to unpadded FP16/BF16 wire cache: [bold green]{s_comp['avg_ratio_vs_fp16']:.2f}x[/bold green] ({s_comp['avg_wire_reduction_vs_fp16_pct']:.1f}% wire payload reduction)\n\n"
         f"[bold]Acceptance Status:[/bold] {'[bold green]ALL CRITERIA PASSED[/bold green]' if all_passed else '[bold red]FAILED THRESHOLDS[/bold red]'}\n"
-        f"[dim]Note: Diagnostic smoke test on 3 passages / 48 target tokens. Worker-to-worker transport is a separate milestone.[/dim]"
     )
 
     panel = Panel(
         summary_content,
-        title="FP8 Quality Benchmark Summary",
+        title=f"FP8 Quality Benchmark Summary ({mode.upper()})",
         border_style="green" if all_passed else "red",
     )
     console.print(panel)

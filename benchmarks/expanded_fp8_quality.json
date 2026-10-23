@@ -1,0 +1,260 @@
+{
+  "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+  "evaluation_scope": "multi_context_length_evaluation",
+  "scope_disclaimer": "Multi-context length evaluation across diverse held-out passages (short to 256+ tokens) reporting macro-averages, token-weighted aggregates, and worst-case metrics.",
+  "enable_fp8": true,
+  "block_size_tokens": 16,
+  "torch_version": "2.10.0",
+  "transformers_version": "5.5.0",
+  "dtype": "float32",
+  "checkpoint_commit_hash": "7ae557604adf67be50417f59c2c2f167def9a775",
+  "thresholds": {
+    "max_delta_nll": 0.05,
+    "min_top1_agreement_pct": 80.0,
+    "min_top5_overlap_pct": 85.0,
+    "min_cosine_similarity": 0.99,
+    "min_compression_ratio_fp32": 2.5,
+    "min_compression_ratio_fp16": 1.4
+  },
+  "criteria_checks": {
+    "delta_nll_passed": true,
+    "top1_agreement_passed": true,
+    "top5_overlap_passed": true,
+    "cosine_similarity_passed": true,
+    "compression_fp32_passed": true,
+    "compression_fp16_passed": true
+  },
+  "all_criteria_passed": true,
+  "summary": {
+    "continuation_steps": {
+      "avg_delta_nll": -0.001,
+      "avg_top1_agreement_pct": 95.2,
+      "avg_top5_overlap_pct": 93.8,
+      "avg_cosine_similarity": 0.99912,
+      "avg_mean_absolute_logit_error": 0.0934
+    },
+    "token_weighted_continuation_steps": {
+      "total_continuation_tokens": 102,
+      "weighted_delta_nll": -0.0028,
+      "weighted_top1_agreement_pct": 95.1,
+      "weighted_top5_overlap_pct": 93.9,
+      "weighted_cosine_similarity": 0.99914,
+      "weighted_mean_absolute_logit_error": 0.0925
+    },
+    "worst_case_continuation_steps": {
+      "max_abs_delta_nll": 0.0221,
+      "min_top1_agreement_pct": 90.9,
+      "min_top5_overlap_pct": 90.6,
+      "min_cosine_similarity": 0.99837,
+      "max_mean_absolute_logit_error": 0.1263
+    },
+    "overall_sequence": {
+      "avg_delta_nll": -0.0011,
+      "avg_top1_agreement_pct": 95.5,
+      "avg_top5_overlap_pct": 94.1,
+      "avg_cosine_similarity": 0.99916
+    },
+    "compression": {
+      "avg_ratio_vs_fp32": 3.37,
+      "avg_ratio_vs_fp16": 1.69,
+      "avg_wire_reduction_vs_fp16_pct": 40.1
+    }
+  },
+  "passages": [
+    {
+      "context_length": 24,
+      "target_tokens": 23,
+      "continuation_tokens": 22,
+      "compression": {
+        "uncompressed_fp32_bytes": 589824,
+        "uncompressed_fp16_bytes": 294912,
+        "wire_payload_bytes": 197376,
+        "ratio_vs_fp32": 2.99,
+        "ratio_vs_fp16": 1.49,
+        "wire_reduction_vs_fp16_pct": 33.1
+      },
+      "boundary_step": {
+        "target_token": 3216,
+        "delta_nll": 0.0,
+        "top1_match": true,
+        "cosine_similarity": 1.0,
+        "mean_absolute_logit_error": 0.0
+      },
+      "continuation_steps": {
+        "delta_nll": -0.0132,
+        "nll_uncompressed": 2.7075,
+        "nll_eval": 2.6942,
+        "top1_agreement_pct": 90.9,
+        "top5_overlap_pct": 90.9,
+        "mean_logit_cosine_similarity": 0.99924,
+        "mean_absolute_logit_error": 0.0837
+      },
+      "overall_sequence": {
+        "delta_nll": -0.0126,
+        "nll_uncompressed": 2.7815,
+        "nll_eval": 2.7689,
+        "top1_agreement_pct": 91.3,
+        "top5_overlap_pct": 91.3,
+        "mean_logit_cosine_similarity": 0.99927,
+        "mean_absolute_logit_error": 0.0801
+      },
+      "category": "Systems & Prefill (~16 tok)"
+    },
+    {
+      "context_length": 37,
+      "target_tokens": 18,
+      "continuation_tokens": 17,
+      "compression": {
+        "uncompressed_fp32_bytes": 909312,
+        "uncompressed_fp16_bytes": 454656,
+        "wire_payload_bytes": 296064,
+        "ratio_vs_fp32": 3.07,
+        "ratio_vs_fp16": 1.54,
+        "wire_reduction_vs_fp16_pct": 34.9
+      },
+      "boundary_step": {
+        "target_token": 3197,
+        "delta_nll": 0.0,
+        "top1_match": true,
+        "cosine_similarity": 1.0,
+        "mean_absolute_logit_error": 0.0
+      },
+      "continuation_steps": {
+        "delta_nll": 0.0166,
+        "nll_uncompressed": 5.5575,
+        "nll_eval": 5.574,
+        "top1_agreement_pct": 94.1,
+        "top5_overlap_pct": 90.6,
+        "mean_logit_cosine_similarity": 0.99837,
+        "mean_absolute_logit_error": 0.1263
+      },
+      "overall_sequence": {
+        "delta_nll": 0.0156,
+        "nll_uncompressed": 5.5444,
+        "nll_eval": 5.5601,
+        "top1_agreement_pct": 94.4,
+        "top5_overlap_pct": 91.1,
+        "mean_logit_cosine_similarity": 0.99846,
+        "mean_absolute_logit_error": 0.1193
+      },
+      "category": "Quantization Math (~32 tok)"
+    },
+    {
+      "context_length": 65,
+      "target_tokens": 18,
+      "continuation_tokens": 17,
+      "compression": {
+        "uncompressed_fp32_bytes": 1597440,
+        "uncompressed_fp16_bytes": 798720,
+        "wire_payload_bytes": 493440,
+        "ratio_vs_fp32": 3.24,
+        "ratio_vs_fp16": 1.62,
+        "wire_reduction_vs_fp16_pct": 38.2
+      },
+      "boundary_step": {
+        "target_token": 1096,
+        "delta_nll": 0.0,
+        "top1_match": true,
+        "cosine_similarity": 1.0,
+        "mean_absolute_logit_error": 0.0
+      },
+      "continuation_steps": {
+        "delta_nll": 0.0017,
+        "nll_uncompressed": 4.6797,
+        "nll_eval": 4.6814,
+        "top1_agreement_pct": 100.0,
+        "top5_overlap_pct": 95.3,
+        "mean_logit_cosine_similarity": 0.99939,
+        "mean_absolute_logit_error": 0.0795
+      },
+      "overall_sequence": {
+        "delta_nll": 0.0016,
+        "nll_uncompressed": 4.5441,
+        "nll_eval": 4.5457,
+        "top1_agreement_pct": 100.0,
+        "top5_overlap_pct": 95.6,
+        "mean_logit_cosine_similarity": 0.99943,
+        "mean_absolute_logit_error": 0.0751
+      },
+      "category": "Distributed Consensus (~64 tok)"
+    },
+    {
+      "context_length": 93,
+      "target_tokens": 26,
+      "continuation_tokens": 25,
+      "compression": {
+        "uncompressed_fp32_bytes": 2285568,
+        "uncompressed_fp16_bytes": 1142784,
+        "wire_payload_bytes": 592128,
+        "ratio_vs_fp32": 3.86,
+        "ratio_vs_fp16": 1.93,
+        "wire_reduction_vs_fp16_pct": 48.2
+      },
+      "boundary_step": {
+        "target_token": 36603,
+        "delta_nll": 0.0,
+        "top1_match": true,
+        "cosine_similarity": 1.0,
+        "mean_absolute_logit_error": 0.0
+      },
+      "continuation_steps": {
+        "delta_nll": -0.0221,
+        "nll_uncompressed": 3.7223,
+        "nll_eval": 3.7002,
+        "top1_agreement_pct": 96.0,
+        "top5_overlap_pct": 96.8,
+        "mean_logit_cosine_similarity": 0.99929,
+        "mean_absolute_logit_error": 0.0907
+      },
+      "overall_sequence": {
+        "delta_nll": -0.0213,
+        "nll_uncompressed": 3.8473,
+        "nll_eval": 3.826,
+        "top1_agreement_pct": 96.2,
+        "top5_overlap_pct": 96.9,
+        "mean_logit_cosine_similarity": 0.99932,
+        "mean_absolute_logit_error": 0.0872
+      },
+      "category": "Compiler Infrastructure (~128 tok)"
+    },
+    {
+      "context_length": 193,
+      "target_tokens": 22,
+      "continuation_tokens": 21,
+      "compression": {
+        "uncompressed_fp32_bytes": 4743168,
+        "uncompressed_fp16_bytes": 2371584,
+        "wire_payload_bytes": 1282944,
+        "ratio_vs_fp32": 3.7,
+        "ratio_vs_fp16": 1.85,
+        "wire_reduction_vs_fp16_pct": 45.9
+      },
+      "boundary_step": {
+        "target_token": 4093,
+        "delta_nll": 0.0,
+        "top1_match": true,
+        "cosine_similarity": 1.0,
+        "mean_absolute_logit_error": 0.0
+      },
+      "continuation_steps": {
+        "delta_nll": 0.0118,
+        "nll_uncompressed": 4.0243,
+        "nll_eval": 4.036,
+        "top1_agreement_pct": 95.2,
+        "top5_overlap_pct": 95.2,
+        "mean_logit_cosine_similarity": 0.99929,
+        "mean_absolute_logit_error": 0.0868
+      },
+      "overall_sequence": {
+        "delta_nll": 0.0112,
+        "nll_uncompressed": 4.1971,
+        "nll_eval": 4.2083,
+        "top1_agreement_pct": 95.5,
+        "top5_overlap_pct": 95.5,
+        "mean_logit_cosine_similarity": 0.99932,
+        "mean_absolute_logit_error": 0.0829
+      },
+      "category": "Computer Architecture (~256 tok)"
+    }
+  ]
+}

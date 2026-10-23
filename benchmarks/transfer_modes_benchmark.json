@@ -1,0 +1,972 @@
+{
+  "model_architecture": {
+    "num_layers": 24,
+    "num_kv_heads": 2,
+    "head_dim": 64,
+    "prefill_tp": 2,
+    "decode_tp": 1,
+    "block_size_tokens": 16
+  },
+  "points": [
+    {
+      "bandwidth": "1 Gbps",
+      "bandwidth_bytes_per_sec": 125000000.0,
+      "seq_len": 8,
+      "uncompressed": {
+        "p50_ms": 3.489493991523832,
+        "p90_ms": 11.985159030459672,
+        "p99_ms": 11.985159030459672,
+        "codec_latency_ms": 1.643333991523832,
+        "total_wire_bytes": 230770
+      },
+      "fp8": {
+        "p50_ms": 7.37747299146536,
+        "p90_ms": 16.33426499913144,
+        "p99_ms": 16.33426499913144,
+        "codec_latency_ms": 6.30162499146536,
+        "total_wire_bytes": 134481
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 3.489493991523832,
+        "p90_ms": 11.985159030459672,
+        "p99_ms": 11.985159030459672,
+        "codec_latency_ms": 1.643333991523832,
+        "total_wire_bytes": 230770
+      },
+      "compression_ratio": 1.72,
+      "speedup_fp8_vs_uncompressed": 0.47,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "1 Gbps",
+      "bandwidth_bytes_per_sec": 125000000.0,
+      "seq_len": 16,
+      "uncompressed": {
+        "p50_ms": 5.055283962884367,
+        "p90_ms": 5.152408974846274,
+        "p99_ms": 5.152408974846274,
+        "codec_latency_ms": 1.6352919628843665,
+        "total_wire_bytes": 427499
+      },
+      "fp8": {
+        "p50_ms": 6.168816006698071,
+        "p90_ms": 6.409566035449862,
+        "p99_ms": 6.409566035449862,
+        "codec_latency_ms": 5.092000006698072,
+        "total_wire_bytes": 134602
+      },
+      "policy_selection": "block_fp8",
+      "policy_result": {
+        "p50_ms": 6.168816006698071,
+        "p90_ms": 6.409566035449862,
+        "p99_ms": 6.409566035449862,
+        "codec_latency_ms": 5.092000006698072,
+        "total_wire_bytes": 134602
+      },
+      "compression_ratio": 3.18,
+      "speedup_fp8_vs_uncompressed": 0.82,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "1 Gbps",
+      "bandwidth_bytes_per_sec": 125000000.0,
+      "seq_len": 32,
+      "uncompressed": {
+        "p50_ms": 8.43855306149766,
+        "p90_ms": 8.517553022758365,
+        "p99_ms": 8.517553022758365,
+        "codec_latency_ms": 1.8728330614976585,
+        "total_wire_bytes": 820715
+      },
+      "fp8": {
+        "p50_ms": 7.822486947726161,
+        "p90_ms": 8.171486985839607,
+        "p99_ms": 8.171486985839607,
+        "codec_latency_ms": 5.95616694772616,
+        "total_wire_bytes": 233290
+      },
+      "policy_selection": "block_fp8",
+      "policy_result": {
+        "p50_ms": 7.822486947726161,
+        "p90_ms": 8.171486985839607,
+        "p99_ms": 8.171486985839607,
+        "codec_latency_ms": 5.95616694772616,
+        "total_wire_bytes": 233290
+      },
+      "compression_ratio": 3.52,
+      "speedup_fp8_vs_uncompressed": 1.08,
+      "fp8_helps": true
+    },
+    {
+      "bandwidth": "1 Gbps",
+      "bandwidth_bytes_per_sec": 125000000.0,
+      "seq_len": 64,
+      "uncompressed": {
+        "p50_ms": 15.08377800318399,
+        "p90_ms": 15.127193991513789,
+        "p99_ms": 15.127193991513789,
+        "codec_latency_ms": 2.2258340031839907,
+        "total_wire_bytes": 1607243
+      },
+      "fp8": {
+        "p50_ms": 10.078743992837401,
+        "p90_ms": 10.22511897235948,
+        "p99_ms": 10.22511897235948,
+        "codec_latency_ms": 6.633415992837399,
+        "total_wire_bytes": 430666
+      },
+      "policy_selection": "block_fp8",
+      "policy_result": {
+        "p50_ms": 10.078743992837401,
+        "p90_ms": 10.22511897235948,
+        "p99_ms": 10.22511897235948,
+        "codec_latency_ms": 6.633415992837399,
+        "total_wire_bytes": 430666
+      },
+      "compression_ratio": 3.73,
+      "speedup_fp8_vs_uncompressed": 1.5,
+      "fp8_helps": true
+    },
+    {
+      "bandwidth": "1 Gbps",
+      "bandwidth_bytes_per_sec": 125000000.0,
+      "seq_len": 128,
+      "uncompressed": {
+        "p50_ms": 28.140632004213302,
+        "p90_ms": 28.147548995182632,
+        "p99_ms": 28.147548995182632,
+        "codec_latency_ms": 2.6990000042133033,
+        "total_wire_bytes": 3180204
+      },
+      "fp8": {
+        "p50_ms": 14.27532806267485,
+        "p90_ms": 14.314121082159579,
+        "p99_ms": 14.314121082159579,
+        "codec_latency_ms": 7.67120806267485,
+        "total_wire_bytes": 825515
+      },
+      "policy_selection": "block_fp8",
+      "policy_result": {
+        "p50_ms": 14.27532806267485,
+        "p90_ms": 14.314121082159579,
+        "p99_ms": 14.314121082159579,
+        "codec_latency_ms": 7.67120806267485,
+        "total_wire_bytes": 825515
+      },
+      "compression_ratio": 3.85,
+      "speedup_fp8_vs_uncompressed": 1.97,
+      "fp8_helps": true
+    },
+    {
+      "bandwidth": "1 Gbps",
+      "bandwidth_bytes_per_sec": 125000000.0,
+      "seq_len": 256,
+      "uncompressed": {
+        "p50_ms": 54.72654004203132,
+        "p90_ms": 54.781913979388534,
+        "p99_ms": 54.781913979388534,
+        "codec_latency_ms": 4.119084042031318,
+        "total_wire_bytes": 6325932
+      },
+      "fp8": {
+        "p50_ms": 23.41166404169029,
+        "p90_ms": 23.503414041828126,
+        "p99_ms": 23.503414041828126,
+        "codec_latency_ms": 10.48920804169029,
+        "total_wire_bytes": 1615307
+      },
+      "policy_selection": "block_fp8",
+      "policy_result": {
+        "p50_ms": 23.41166404169029,
+        "p90_ms": 23.503414041828126,
+        "p99_ms": 23.503414041828126,
+        "codec_latency_ms": 10.48920804169029,
+        "total_wire_bytes": 1615307
+      },
+      "compression_ratio": 3.92,
+      "speedup_fp8_vs_uncompressed": 2.34,
+      "fp8_helps": true
+    },
+    {
+      "bandwidth": "1 Gbps",
+      "bandwidth_bytes_per_sec": 125000000.0,
+      "seq_len": 512,
+      "uncompressed": {
+        "p50_ms": 109.43853898263212,
+        "p90_ms": 110.75078902124103,
+        "p99_ms": 110.75078902124103,
+        "codec_latency_ms": 8.49866698263213,
+        "total_wire_bytes": 12617484
+      },
+      "fp8": {
+        "p50_ms": 49.70156096736386,
+        "p90_ms": 50.75318701913997,
+        "p99_ms": 50.75318701913997,
+        "codec_latency_ms": 24.147040967363864,
+        "total_wire_bytes": 3194315
+      },
+      "policy_selection": "block_fp8",
+      "policy_result": {
+        "p50_ms": 49.70156096736386,
+        "p90_ms": 50.75318701913997,
+        "p99_ms": 50.75318701913997,
+        "codec_latency_ms": 24.147040967363864,
+        "total_wire_bytes": 3194315
+      },
+      "compression_ratio": 3.95,
+      "speedup_fp8_vs_uncompressed": 2.2,
+      "fp8_helps": true
+    },
+    {
+      "bandwidth": "1 Gbps",
+      "bandwidth_bytes_per_sec": 125000000.0,
+      "seq_len": 1024,
+      "uncompressed": {
+        "p50_ms": 218.53681897619168,
+        "p90_ms": 220.72369400984968,
+        "p99_ms": 220.72369400984968,
+        "codec_latency_ms": 16.93287497619167,
+        "total_wire_bytes": 25200493
+      },
+      "fp8": {
+        "p50_ms": 104.25279896742606,
+        "p90_ms": 108.96392296570295,
+        "p99_ms": 108.96392296570295,
+        "codec_latency_ms": 53.43337496742606,
+        "total_wire_bytes": 6352428
+      },
+      "policy_selection": "block_fp8",
+      "policy_result": {
+        "p50_ms": 104.25279896742606,
+        "p90_ms": 108.96392296570295,
+        "p99_ms": 108.96392296570295,
+        "codec_latency_ms": 53.43337496742606,
+        "total_wire_bytes": 6352428
+      },
+      "compression_ratio": 3.97,
+      "speedup_fp8_vs_uncompressed": 2.1,
+      "fp8_helps": true
+    },
+    {
+      "bandwidth": "10 Gbps",
+      "bandwidth_bytes_per_sec": 1250000000.0,
+      "seq_len": 8,
+      "uncompressed": {
+        "p50_ms": 1.7221160075437127,
+        "p90_ms": 1.7904489492807387,
+        "p99_ms": 1.7904489492807387,
+        "codec_latency_ms": 1.5375000075437129,
+        "total_wire_bytes": 230770
+      },
+      "fp8": {
+        "p50_ms": 6.167460744629311,
+        "p90_ms": 6.284376768755424,
+        "p99_ms": 6.284376768755424,
+        "codec_latency_ms": 6.059875944629312,
+        "total_wire_bytes": 134481
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 1.7221160075437127,
+        "p90_ms": 1.7904489492807387,
+        "p99_ms": 1.7904489492807387,
+        "codec_latency_ms": 1.5375000075437129,
+        "total_wire_bytes": 230770
+      },
+      "compression_ratio": 1.72,
+      "speedup_fp8_vs_uncompressed": 0.28,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "10 Gbps",
+      "bandwidth_bytes_per_sec": 1250000000.0,
+      "seq_len": 16,
+      "uncompressed": {
+        "p50_ms": 1.9068742122636557,
+        "p90_ms": 2.134666167958212,
+        "p99_ms": 2.134666167958212,
+        "codec_latency_ms": 1.5648750122636557,
+        "total_wire_bytes": 427499
+      },
+      "fp8": {
+        "p50_ms": 5.328139627906715,
+        "p90_ms": 5.342682579155301,
+        "p99_ms": 5.342682579155301,
+        "codec_latency_ms": 5.220458027906716,
+        "total_wire_bytes": 134602
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 1.9068742122636557,
+        "p90_ms": 2.134666167958212,
+        "p99_ms": 2.134666167958212,
+        "codec_latency_ms": 1.5648750122636557,
+        "total_wire_bytes": 427499
+      },
+      "compression_ratio": 3.18,
+      "speedup_fp8_vs_uncompressed": 0.36,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "10 Gbps",
+      "bandwidth_bytes_per_sec": 1250000000.0,
+      "seq_len": 32,
+      "uncompressed": {
+        "p50_ms": 2.348988029982269,
+        "p90_ms": 2.3708629928224982,
+        "p99_ms": 2.3708629928224982,
+        "codec_latency_ms": 1.6924160299822688,
+        "total_wire_bytes": 820715
+      },
+      "fp8": {
+        "p50_ms": 6.28738206261468,
+        "p90_ms": 6.316256031018466,
+        "p99_ms": 6.316256031018466,
+        "codec_latency_ms": 6.100750062614679,
+        "total_wire_bytes": 233290
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 2.348988029982269,
+        "p90_ms": 2.3708629928224982,
+        "p99_ms": 2.3708629928224982,
+        "codec_latency_ms": 1.6924160299822688,
+        "total_wire_bytes": 820715
+      },
+      "compression_ratio": 3.52,
+      "speedup_fp8_vs_uncompressed": 0.37,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "10 Gbps",
+      "bandwidth_bytes_per_sec": 1250000000.0,
+      "seq_len": 64,
+      "uncompressed": {
+        "p50_ms": 3.3580854412587224,
+        "p90_ms": 3.43125241281929,
+        "p99_ms": 3.43125241281929,
+        "codec_latency_ms": 2.0722910412587225,
+        "total_wire_bytes": 1607243
+      },
+      "fp8": {
+        "p50_ms": 6.560531819332231,
+        "p90_ms": 6.8264918188562875,
+        "p99_ms": 6.8264918188562875,
+        "codec_latency_ms": 6.21599901933223,
+        "total_wire_bytes": 430666
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 3.3580854412587224,
+        "p90_ms": 3.43125241281929,
+        "p99_ms": 3.43125241281929,
+        "codec_latency_ms": 2.0722910412587225,
+        "total_wire_bytes": 1607243
+      },
+      "compression_ratio": 3.73,
+      "speedup_fp8_vs_uncompressed": 0.51,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "10 Gbps",
+      "bandwidth_bytes_per_sec": 1250000000.0,
+      "seq_len": 128,
+      "uncompressed": {
+        "p50_ms": 5.028455224746537,
+        "p90_ms": 5.201914170683992,
+        "p99_ms": 5.201914170683992,
+        "codec_latency_ms": 2.484292024746537,
+        "total_wire_bytes": 3180204
+      },
+      "fp8": {
+        "p50_ms": 8.070370983771502,
+        "p90_ms": 8.204495055108785,
+        "p99_ms": 8.204495055108785,
+        "codec_latency_ms": 7.409958983771503,
+        "total_wire_bytes": 825515
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 5.028455224746537,
+        "p90_ms": 5.201914170683992,
+        "p99_ms": 5.201914170683992,
+        "codec_latency_ms": 2.484292024746537,
+        "total_wire_bytes": 3180204
+      },
+      "compression_ratio": 3.85,
+      "speedup_fp8_vs_uncompressed": 0.62,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "10 Gbps",
+      "bandwidth_bytes_per_sec": 1250000000.0,
+      "seq_len": 256,
+      "uncompressed": {
+        "p50_ms": 8.96616160063443,
+        "p90_ms": 8.9942455746643,
+        "p99_ms": 8.9942455746643,
+        "codec_latency_ms": 3.905416000634432,
+        "total_wire_bytes": 6325932
+      },
+      "fp8": {
+        "p50_ms": 11.732911595702149,
+        "p90_ms": 12.300870635174192,
+        "p99_ms": 12.300870635174192,
+        "codec_latency_ms": 10.440665995702147,
+        "total_wire_bytes": 1615307
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 8.96616160063443,
+        "p90_ms": 8.9942455746643,
+        "p99_ms": 8.9942455746643,
+        "codec_latency_ms": 3.905416000634432,
+        "total_wire_bytes": 6325932
+      },
+      "compression_ratio": 3.92,
+      "speedup_fp8_vs_uncompressed": 0.76,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "10 Gbps",
+      "bandwidth_bytes_per_sec": 1250000000.0,
+      "seq_len": 512,
+      "uncompressed": {
+        "p50_ms": 18.266444189996136,
+        "p90_ms": 18.320487267394228,
+        "p99_ms": 18.320487267394228,
+        "codec_latency_ms": 8.172456989996135,
+        "total_wire_bytes": 12617484
+      },
+      "fp8": {
+        "p50_ms": 33.20995200576675,
+        "p90_ms": 44.10453600960267,
+        "p99_ms": 44.10453600960267,
+        "codec_latency_ms": 30.65450000576675,
+        "total_wire_bytes": 3194315
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 18.266444189996136,
+        "p90_ms": 18.320487267394228,
+        "p99_ms": 18.320487267394228,
+        "codec_latency_ms": 8.172456989996135,
+        "total_wire_bytes": 12617484
+      },
+      "compression_ratio": 3.95,
+      "speedup_fp8_vs_uncompressed": 0.55,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "10 Gbps",
+      "bandwidth_bytes_per_sec": 1250000000.0,
+      "seq_len": 1024,
+      "uncompressed": {
+        "p50_ms": 37.09851941616776,
+        "p90_ms": 37.231351335640426,
+        "p99_ms": 37.231351335640426,
+        "codec_latency_ms": 16.93812501616776,
+        "total_wire_bytes": 25200493
+      },
+      "fp8": {
+        "p50_ms": 58.49648334741493,
+        "p90_ms": 65.68831738740107,
+        "p99_ms": 65.68831738740107,
+        "codec_latency_ms": 53.414540947414935,
+        "total_wire_bytes": 6352428
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 37.09851941616776,
+        "p90_ms": 37.231351335640426,
+        "p99_ms": 37.231351335640426,
+        "codec_latency_ms": 16.93812501616776,
+        "total_wire_bytes": 25200493
+      },
+      "compression_ratio": 3.97,
+      "speedup_fp8_vs_uncompressed": 0.63,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "25 Gbps",
+      "bandwidth_bytes_per_sec": 3125000000.0,
+      "seq_len": 8,
+      "uncompressed": {
+        "p50_ms": 1.6022213671652912,
+        "p90_ms": 1.6754714010579823,
+        "p99_ms": 1.6754714010579823,
+        "codec_latency_ms": 1.5283749671652913,
+        "total_wire_bytes": 230770
+      },
+      "fp8": {
+        "p50_ms": 6.011949858865393,
+        "p90_ms": 6.018533902014298,
+        "p99_ms": 6.018533902014298,
+        "codec_latency_ms": 5.968915938865393,
+        "total_wire_bytes": 134481
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 1.6022213671652912,
+        "p90_ms": 1.6754714010579823,
+        "p99_ms": 1.6754714010579823,
+        "codec_latency_ms": 1.5283749671652913,
+        "total_wire_bytes": 230770
+      },
+      "compression_ratio": 1.72,
+      "speedup_fp8_vs_uncompressed": 0.27,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "25 Gbps",
+      "bandwidth_bytes_per_sec": 3125000000.0,
+      "seq_len": 16,
+      "uncompressed": {
+        "p50_ms": 1.6662576589042473,
+        "p90_ms": 1.7755506913418102,
+        "p99_ms": 1.7755506913418102,
+        "codec_latency_ms": 1.5294579789042473,
+        "total_wire_bytes": 427499
+      },
+      "fp8": {
+        "p50_ms": 4.845238658635035,
+        "p90_ms": 4.859030614642515,
+        "p99_ms": 4.859030614642515,
+        "codec_latency_ms": 4.802166018635035,
+        "total_wire_bytes": 134602
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 1.6662576589042473,
+        "p90_ms": 1.7755506913418102,
+        "p99_ms": 1.7755506913418102,
+        "codec_latency_ms": 1.5294579789042473,
+        "total_wire_bytes": 427499
+      },
+      "compression_ratio": 3.18,
+      "speedup_fp8_vs_uncompressed": 0.34,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "25 Gbps",
+      "bandwidth_bytes_per_sec": 3125000000.0,
+      "seq_len": 32,
+      "uncompressed": {
+        "p50_ms": 1.8057117953402282,
+        "p90_ms": 1.9037958367233456,
+        "p99_ms": 1.9037958367233456,
+        "codec_latency_ms": 1.543082995340228,
+        "total_wire_bytes": 820715
+      },
+      "fp8": {
+        "p50_ms": 5.6447777511912465,
+        "p90_ms": 5.714444812516409,
+        "p99_ms": 5.714444812516409,
+        "codec_latency_ms": 5.5701249511912465,
+        "total_wire_bytes": 233290
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 1.8057117953402282,
+        "p90_ms": 1.9037958367233456,
+        "p99_ms": 1.9037958367233456,
+        "codec_latency_ms": 1.543082995340228,
+        "total_wire_bytes": 820715
+      },
+      "compression_ratio": 3.52,
+      "speedup_fp8_vs_uncompressed": 0.32,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "25 Gbps",
+      "bandwidth_bytes_per_sec": 3125000000.0,
+      "seq_len": 64,
+      "uncompressed": {
+        "p50_ms": 2.351024760620663,
+        "p90_ms": 2.5306517977621352,
+        "p99_ms": 2.5306517977621352,
+        "codec_latency_ms": 1.8367070006206632,
+        "total_wire_bytes": 1607243
+      },
+      "fp8": {
+        "p50_ms": 6.35714609952637,
+        "p90_ms": 6.411229107379849,
+        "p99_ms": 6.411229107379849,
+        "codec_latency_ms": 6.219332979526371,
+        "total_wire_bytes": 430666
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 2.351024760620663,
+        "p90_ms": 2.5306517977621352,
+        "p99_ms": 2.5306517977621352,
+        "codec_latency_ms": 1.8367070006206632,
+        "total_wire_bytes": 1607243
+      },
+      "compression_ratio": 3.73,
+      "speedup_fp8_vs_uncompressed": 0.37,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "25 Gbps",
+      "bandwidth_bytes_per_sec": 3125000000.0,
+      "seq_len": 128,
+      "uncompressed": {
+        "p50_ms": 3.6274142553738042,
+        "p90_ms": 3.8662492520815417,
+        "p99_ms": 3.8662492520815417,
+        "codec_latency_ms": 2.6097489753738046,
+        "total_wire_bytes": 3180204
+      },
+      "fp8": {
+        "p50_ms": 7.676372811373878,
+        "p90_ms": 7.754622825131375,
+        "p99_ms": 7.754622825131375,
+        "codec_latency_ms": 7.4122080113738775,
+        "total_wire_bytes": 825515
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 3.6274142553738042,
+        "p90_ms": 3.8662492520815417,
+        "p99_ms": 3.8662492520815417,
+        "codec_latency_ms": 2.6097489753738046,
+        "total_wire_bytes": 3180204
+      },
+      "compression_ratio": 3.85,
+      "speedup_fp8_vs_uncompressed": 0.47,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "25 Gbps",
+      "bandwidth_bytes_per_sec": 3125000000.0,
+      "seq_len": 256,
+      "uncompressed": {
+        "p50_ms": 5.667881280684462,
+        "p90_ms": 5.750922250596425,
+        "p99_ms": 5.750922250596425,
+        "codec_latency_ms": 3.6435830406844616,
+        "total_wire_bytes": 6325932
+      },
+      "fp8": {
+        "p50_ms": 11.796190237198017,
+        "p90_ms": 14.101065238043658,
+        "p99_ms": 14.101065238043658,
+        "codec_latency_ms": 11.279291997198015,
+        "total_wire_bytes": 1615307
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 5.667881280684462,
+        "p90_ms": 5.750922250596425,
+        "p99_ms": 5.750922250596425,
+        "codec_latency_ms": 3.6435830406844616,
+        "total_wire_bytes": 6325932
+      },
+      "compression_ratio": 3.92,
+      "speedup_fp8_vs_uncompressed": 0.48,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "25 Gbps",
+      "bandwidth_bytes_per_sec": 3125000000.0,
+      "seq_len": 512,
+      "uncompressed": {
+        "p50_ms": 10.91271987280274,
+        "p90_ms": 11.16134592194507,
+        "p99_ms": 11.16134592194507,
+        "codec_latency_ms": 6.875124992802739,
+        "total_wire_bytes": 12617484
+      },
+      "fp8": {
+        "p50_ms": 23.886388774635066,
+        "p90_ms": 32.21288779904114,
+        "p99_ms": 32.21288779904114,
+        "codec_latency_ms": 22.864207974635065,
+        "total_wire_bytes": 3194315
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 10.91271987280274,
+        "p90_ms": 11.16134592194507,
+        "p99_ms": 11.16134592194507,
+        "codec_latency_ms": 6.875124992802739,
+        "total_wire_bytes": 12617484
+      },
+      "compression_ratio": 3.95,
+      "speedup_fp8_vs_uncompressed": 0.46,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "25 Gbps",
+      "bandwidth_bytes_per_sec": 3125000000.0,
+      "seq_len": 1024,
+      "uncompressed": {
+        "p50_ms": 21.96169978682525,
+        "p90_ms": 22.56557475751839,
+        "p99_ms": 22.56557475751839,
+        "codec_latency_ms": 13.89754202682525,
+        "total_wire_bytes": 25200493
+      },
+      "fp8": {
+        "p50_ms": 59.44465195370426,
+        "p90_ms": 66.24690194457358,
+        "p99_ms": 66.24690194457358,
+        "codec_latency_ms": 57.41187499370426,
+        "total_wire_bytes": 6352428
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 21.96169978682525,
+        "p90_ms": 22.56557475751839,
+        "p99_ms": 22.56557475751839,
+        "codec_latency_ms": 13.89754202682525,
+        "total_wire_bytes": 25200493
+      },
+      "compression_ratio": 3.97,
+      "speedup_fp8_vs_uncompressed": 0.37,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "100 Gbps",
+      "bandwidth_bytes_per_sec": 12500000000.0,
+      "seq_len": 8,
+      "uncompressed": {
+        "p50_ms": 1.6003785930182397,
+        "p90_ms": 1.650086538454479,
+        "p99_ms": 1.650086538454479,
+        "codec_latency_ms": 1.5819169930182397,
+        "total_wire_bytes": 230770
+      },
+      "fp8": {
+        "p50_ms": 6.142758489529292,
+        "p90_ms": 6.174216412416349,
+        "p99_ms": 6.174216412416349,
+        "codec_latency_ms": 6.132000009529293,
+        "total_wire_bytes": 134481
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 1.6003785930182397,
+        "p90_ms": 1.650086538454479,
+        "p99_ms": 1.650086538454479,
+        "codec_latency_ms": 1.5819169930182397,
+        "total_wire_bytes": 230770
+      },
+      "compression_ratio": 1.72,
+      "speedup_fp8_vs_uncompressed": 0.26,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "100 Gbps",
+      "bandwidth_bytes_per_sec": 12500000000.0,
+      "seq_len": 16,
+      "uncompressed": {
+        "p50_ms": 1.6883669392964376,
+        "p90_ms": 1.8047829014076424,
+        "p99_ms": 1.8047829014076424,
+        "codec_latency_ms": 1.6541670192964375,
+        "total_wire_bytes": 427499
+      },
+      "fp8": {
+        "p50_ms": 5.154768155198101,
+        "p90_ms": 5.18043517252386,
+        "p99_ms": 5.18043517252386,
+        "codec_latency_ms": 5.143999995198101,
+        "total_wire_bytes": 134602
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 1.6883669392964376,
+        "p90_ms": 1.8047829014076424,
+        "p99_ms": 1.8047829014076424,
+        "codec_latency_ms": 1.6541670192964375,
+        "total_wire_bytes": 427499
+      },
+      "compression_ratio": 3.18,
+      "speedup_fp8_vs_uncompressed": 0.33,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "100 Gbps",
+      "bandwidth_bytes_per_sec": 12500000000.0,
+      "seq_len": 32,
+      "uncompressed": {
+        "p50_ms": 1.7535322175237653,
+        "p90_ms": 1.7697811771060643,
+        "p99_ms": 1.7697811771060643,
+        "codec_latency_ms": 1.6878750175237656,
+        "total_wire_bytes": 820715
+      },
+      "fp8": {
+        "p50_ms": 6.008204208602828,
+        "p90_ms": 6.137996232984286,
+        "p99_ms": 6.137996232984286,
+        "codec_latency_ms": 5.989541008602828,
+        "total_wire_bytes": 233290
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 1.7535322175237653,
+        "p90_ms": 1.7697811771060643,
+        "p99_ms": 1.7697811771060643,
+        "codec_latency_ms": 1.6878750175237656,
+        "total_wire_bytes": 820715
+      },
+      "compression_ratio": 3.52,
+      "speedup_fp8_vs_uncompressed": 0.29,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "100 Gbps",
+      "bandwidth_bytes_per_sec": 12500000000.0,
+      "seq_len": 64,
+      "uncompressed": {
+        "p50_ms": 2.0023293885723676,
+        "p90_ms": 2.0604124850914802,
+        "p99_ms": 2.0604124850914802,
+        "codec_latency_ms": 1.8737499485723674,
+        "total_wire_bytes": 1607243
+      },
+      "fp8": {
+        "p50_ms": 6.487245254879801,
+        "p90_ms": 6.704494347991406,
+        "p99_ms": 6.704494347991406,
+        "codec_latency_ms": 6.452791974879801,
+        "total_wire_bytes": 430666
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 2.0023293885723676,
+        "p90_ms": 2.0604124850914802,
+        "p99_ms": 2.0604124850914802,
+        "codec_latency_ms": 1.8737499485723674,
+        "total_wire_bytes": 1607243
+      },
+      "compression_ratio": 3.73,
+      "speedup_fp8_vs_uncompressed": 0.31,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "100 Gbps",
+      "bandwidth_bytes_per_sec": 12500000000.0,
+      "seq_len": 128,
+      "uncompressed": {
+        "p50_ms": 2.571333321735419,
+        "p90_ms": 2.979916293166734,
+        "p99_ms": 2.979916293166734,
+        "codec_latency_ms": 2.316917001735419,
+        "total_wire_bytes": 3180204
+      },
+      "fp8": {
+        "p50_ms": 7.595415120988291,
+        "p90_ms": 7.7555832206710695,
+        "p99_ms": 7.7555832206710695,
+        "codec_latency_ms": 7.5293739209882915,
+        "total_wire_bytes": 825515
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 2.571333321735419,
+        "p90_ms": 2.979916293166734,
+        "p99_ms": 2.979916293166734,
+        "codec_latency_ms": 2.316917001735419,
+        "total_wire_bytes": 3180204
+      },
+      "compression_ratio": 3.85,
+      "speedup_fp8_vs_uncompressed": 0.34,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "100 Gbps",
+      "bandwidth_bytes_per_sec": 12500000000.0,
+      "seq_len": 256,
+      "uncompressed": {
+        "p50_ms": 4.223573530218003,
+        "p90_ms": 4.483325566290317,
+        "p99_ms": 4.483325566290317,
+        "codec_latency_ms": 3.717498970218003,
+        "total_wire_bytes": 6325932
+      },
+      "fp8": {
+        "p50_ms": 13.99030757812783,
+        "p90_ms": 16.750141631122677,
+        "p99_ms": 16.750141631122677,
+        "codec_latency_ms": 13.861083018127829,
+        "total_wire_bytes": 1615307
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 4.223573530218003,
+        "p90_ms": 4.483325566290317,
+        "p99_ms": 4.483325566290317,
+        "codec_latency_ms": 3.717498970218003,
+        "total_wire_bytes": 6325932
+      },
+      "compression_ratio": 3.92,
+      "speedup_fp8_vs_uncompressed": 0.3,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "100 Gbps",
+      "bandwidth_bytes_per_sec": 12500000000.0,
+      "seq_len": 512,
+      "uncompressed": {
+        "p50_ms": 8.905440625041784,
+        "p90_ms": 8.969857704598518,
+        "p99_ms": 8.969857704598518,
+        "codec_latency_ms": 7.896041905041784,
+        "total_wire_bytes": 12617484
+      },
+      "fp8": {
+        "p50_ms": 24.38150422569592,
+        "p90_ms": 32.27217018759106,
+        "p99_ms": 32.27217018759106,
+        "codec_latency_ms": 24.12595902569592,
+        "total_wire_bytes": 3194315
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 8.905440625041784,
+        "p90_ms": 8.969857704598518,
+        "p99_ms": 8.969857704598518,
+        "codec_latency_ms": 7.896041905041784,
+        "total_wire_bytes": 12617484
+      },
+      "compression_ratio": 3.95,
+      "speedup_fp8_vs_uncompressed": 0.37,
+      "fp8_helps": false
+    },
+    {
+      "bandwidth": "100 Gbps",
+      "bandwidth_bytes_per_sec": 12500000000.0,
+      "seq_len": 1024,
+      "uncompressed": {
+        "p50_ms": 18.3127064286373,
+        "p90_ms": 18.473331458458247,
+        "p99_ms": 18.473331458458247,
+        "codec_latency_ms": 16.2966669886373,
+        "total_wire_bytes": 25200493
+      },
+      "fp8": {
+        "p50_ms": 55.37894423837205,
+        "p90_ms": 61.39452828579014,
+        "p99_ms": 61.39452828579014,
+        "codec_latency_ms": 54.87074999837205,
+        "total_wire_bytes": 6352428
+      },
+      "policy_selection": "uncompressed_fp16",
+      "policy_result": {
+        "p50_ms": 18.3127064286373,
+        "p90_ms": 18.473331458458247,
+        "p99_ms": 18.473331458458247,
+        "codec_latency_ms": 16.2966669886373,
+        "total_wire_bytes": 25200493
+      },
+      "compression_ratio": 3.97,
+      "speedup_fp8_vs_uncompressed": 0.33,
+      "fp8_helps": false
+    }
+  ]
+}
