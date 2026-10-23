@@ -22,23 +22,28 @@ Guarantees:
 """
 
 import os
+import os
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 import json
+import math
 import socket
 import time
 from dataclasses import dataclass, asdict
 from typing import Dict, Any, List, Tuple, Optional, Set
 import torch
 
+from hetero_kv.layout import KVPartitionPlan, KVHeadSlice
 from hetero_kv.quant.fp8_block import FP8BlockPayload, dequantize_kv_block_fp8
 
 MAGIC_MANIFEST = b"HKVM"
 MAGIC_FRAME = b"HKVF"
 
-MAX_METADATA_BYTES = 64 * 1024          # 64 KB max metadata size
-MAX_PAYLOAD_BYTES = 1024 * 1024 * 1024  # 1 GB max single tensor frame size
-DEFAULT_TIMEOUT = 10.0                   # 10s default socket timeout
+MAX_METADATA_BYTES = 64 * 1024                # 64 KB max metadata size
+MAX_PAYLOAD_BYTES = 1024 * 1024 * 1024        # 1 GB max single tensor frame size
+MAX_TENSOR_BYTES = 1024 * 1024 * 1024         # 1 GB max decoded tensor size
+MAX_REQUEST_BYTES = 16 * 1024 * 1024 * 1024   # 16 GB max cumulative bytes for a single request
+DEFAULT_TIMEOUT = 10.0                         # 10s default socket timeout
 
 DTYPE_BYTE_SIZES = {
     "float32": 4,
@@ -80,7 +85,7 @@ class CorruptedFrameError(TransportError):
 
 
 class MismatchedRequestError(TransportError):
-    """Request ID or metadata mismatch."""
+    """Request ID, model identity, or destination rank mismatch."""
     pass
 
 
@@ -132,23 +137,86 @@ class RequestManifest:
     dtype: str
     enable_fp8: bool = False
     block_size_tokens: int = 16
+    decode_rank: int = 0
 
     def validate(self) -> None:
         if not self.request_id:
             raise ManifestValidationError("request_id cannot be empty")
+        if not self.model_id:
+            raise ManifestValidationError("model_id cannot be empty")
         if self.num_layers <= 0:
             raise ManifestValidationError(f"Invalid num_layers: {self.num_layers}")
+        if self.num_kv_heads <= 0:
+            raise ManifestValidationError(f"Invalid num_kv_heads: {self.num_kv_heads}")
+        if self.head_dim <= 0:
+            raise ManifestValidationError(f"Invalid head_dim: {self.head_dim}")
         if self.seq_len <= 0:
             raise ManifestValidationError(f"Invalid seq_len: {self.seq_len}")
         if self.prefill_tp <= 0 or self.decode_tp <= 0:
             raise ManifestValidationError(f"Invalid TP: prefill={self.prefill_tp}, decode={self.decode_tp}")
+        if self.decode_rank < 0 or self.decode_rank >= self.decode_tp:
+            raise ManifestValidationError(
+                f"decode_rank {self.decode_rank} out of bounds [0, {self.decode_tp - 1}]"
+            )
         if self.dtype not in DTYPE_BYTE_SIZES:
             raise ManifestValidationError(f"Unsupported dtype: {self.dtype}")
-        expected_min_frames = self.num_layers * 2 * self.prefill_tp
-        if self.expected_frames != expected_min_frames:
+
+        # Construct and validate bipartite partition plan
+        try:
+            plan = KVPartitionPlan.create(self.num_kv_heads, self.prefill_tp, self.decode_tp)
+        except ValueError as e:
+            raise ManifestValidationError(f"Invalid partition geometry: {e}") from e
+
+        target_routes = [r for r in plan.transfer_routes if r.decode_rank == self.decode_rank]
+        expected_frames_for_rank = len(target_routes) * 2 * self.num_layers
+        if self.expected_frames != expected_frames_for_rank:
             raise ManifestValidationError(
-                f"expected_frames mismatch: got {self.expected_frames}, expected {expected_min_frames}"
+                f"expected_frames mismatch for decode_rank {self.decode_rank}: got {self.expected_frames}, "
+                f"expected {expected_frames_for_rank} based on partition plan"
             )
+
+
+def validate_manifest_compatibility(
+    manifest: RequestManifest,
+    model_config: Any,
+    expected_model_id: Optional[str] = None,
+    expected_decode_rank: Optional[int] = None,
+) -> None:
+    """
+    Validates that an incoming RequestManifest matches the receiving consumer's
+    expected model architecture, identity, and target decode rank before accepting cache frames.
+    """
+    manifest.validate()
+
+    if expected_model_id is not None and manifest.model_id != expected_model_id:
+        raise MismatchedRequestError(
+            f"Manifest model_id '{manifest.model_id}' does not match consumer expected '{expected_model_id}'"
+        )
+
+    if expected_decode_rank is not None and manifest.decode_rank != expected_decode_rank:
+        raise ManifestValidationError(
+            f"Manifest decode_rank {manifest.decode_rank} does not match consumer expected {expected_decode_rank}"
+        )
+
+    config_num_layers = getattr(model_config, "num_hidden_layers", getattr(model_config, "num_layers", None))
+    if config_num_layers is not None and manifest.num_layers != config_num_layers:
+        raise ManifestValidationError(
+            f"Manifest num_layers ({manifest.num_layers}) does not match model config ({config_num_layers})"
+        )
+
+    config_kv_heads = getattr(model_config, "num_key_value_heads", getattr(model_config, "num_attention_heads", None))
+    if config_kv_heads is not None and manifest.num_kv_heads != config_kv_heads:
+        raise ManifestValidationError(
+            f"Manifest num_kv_heads ({manifest.num_kv_heads}) does not match model config ({config_kv_heads})"
+        )
+
+    config_head_dim = getattr(model_config, "head_dim", None)
+    if config_head_dim is None and hasattr(model_config, "hidden_size") and hasattr(model_config, "num_attention_heads"):
+        config_head_dim = model_config.hidden_size // model_config.num_attention_heads
+    if config_head_dim is not None and manifest.head_dim != config_head_dim:
+        raise ManifestValidationError(
+            f"Manifest head_dim ({manifest.head_dim}) does not match model config ({config_head_dim})"
+        )
 
 
 @dataclass
@@ -172,7 +240,13 @@ class FrameMetadata:
     original_dtype: Optional[str] = None
     block_size_tokens: Optional[int] = None
 
-    def validate(self, manifest: RequestManifest) -> None:
+    def validate(
+        self,
+        manifest: RequestManifest,
+        plan: Optional[KVPartitionPlan] = None,
+        max_payload_bytes: int = MAX_PAYLOAD_BYTES,
+        max_tensor_bytes: int = MAX_TENSOR_BYTES,
+    ) -> None:
         if self.request_id != manifest.request_id:
             raise MismatchedRequestError(
                 f"Frame request_id '{self.request_id}' does not match manifest '{manifest.request_id}'"
@@ -187,40 +261,130 @@ class FrameMetadata:
             raise FrameValidationError(
                 f"prefill_rank {self.prefill_rank} out of bounds [0, {manifest.prefill_tp - 1}]"
             )
+        if self.decode_rank < 0 or self.decode_rank >= manifest.decode_tp:
+            raise FrameValidationError(
+                f"decode_rank {self.decode_rank} out of bounds [0, {manifest.decode_tp - 1}]"
+            )
+        if self.decode_rank != manifest.decode_rank:
+            raise FrameValidationError(
+                f"Frame decode_rank {self.decode_rank} does not match manifest decode_rank {manifest.decode_rank}"
+            )
         if self.start_head_idx >= self.end_head_idx:
             raise FrameValidationError(
                 f"Invalid head range: [{self.start_head_idx}, {self.end_head_idx}]"
             )
-        # Strict body length calculation validation
+
+        # Validate transfer route and head ownership against KVPartitionPlan
+        if plan is None:
+            plan = KVPartitionPlan.create(manifest.num_kv_heads, manifest.prefill_tp, manifest.decode_tp)
+
+        matching_routes = [
+            r for r in plan.transfer_routes
+            if r.prefill_rank == self.prefill_rank
+            and r.decode_rank == self.decode_rank
+            and r.head_slice.start_head_idx == self.start_head_idx
+            and r.head_slice.end_head_idx == self.end_head_idx
+        ]
+        if not matching_routes:
+            raise FrameValidationError(
+                f"Unauthorized route: no transfer route in partition plan from prefill_rank {self.prefill_rank} "
+                f"to decode_rank {self.decode_rank} for head slice [{self.start_head_idx}:{self.end_head_idx}]"
+            )
+
+        # Enforce encoded-body payload limit before allocation
+        if self.body_bytes <= 0:
+            raise FrameValidationError("Frame body_bytes must be strictly positive")
+        if self.body_bytes > max_payload_bytes:
+            raise FrameValidationError(
+                f"Frame body size {self.body_bytes} exceeds maximum allowed payload limit {max_payload_bytes}"
+            )
+
+        # Strict validation of shapes, sequence lengths, dtypes, and scale geometry
+        declared_num_heads = self.end_head_idx - self.start_head_idx
+
         if not self.is_quantized:
             if self.dtype not in DTYPE_BYTE_SIZES:
                 raise FrameValidationError(f"Invalid frame dtype: {self.dtype}")
+            if self.dtype != manifest.dtype:
+                raise FrameValidationError(
+                    f"Frame dtype '{self.dtype}' does not match manifest dtype '{manifest.dtype}'"
+                )
+            if len(self.shape) != 4:
+                raise FrameValidationError(
+                    f"Uncompressed frame shape must be 4D [batch, seq_len, num_heads, head_dim], got {self.shape}"
+                )
+            if self.shape[1] != manifest.seq_len:
+                raise FrameValidationError(
+                    f"Frame seq_len ({self.shape[1]}) does not match manifest seq_len ({manifest.seq_len})"
+                )
+            if self.shape[2] != declared_num_heads:
+                raise FrameValidationError(
+                    f"Frame head count dimension ({self.shape[2]}) does not match declared heads ({declared_num_heads})"
+                )
+            if self.shape[3] != manifest.head_dim:
+                raise FrameValidationError(
+                    f"Frame head_dim ({self.shape[3]}) does not match manifest head_dim ({manifest.head_dim})"
+                )
+
             elem_size = DTYPE_BYTE_SIZES[self.dtype]
-            num_elements = 1
-            for d in self.shape:
-                if d <= 0:
-                    raise FrameValidationError(f"Invalid shape dimension: {d}")
-                num_elements *= d
+            num_elements = math.prod(self.shape)
             expected_bytes = num_elements * elem_size
             if self.body_bytes != expected_bytes:
                 raise FrameValidationError(
                     f"Frame body_bytes ({self.body_bytes}) does not match shape ({self.shape}) "
                     f"and dtype ({self.dtype}) expected bytes ({expected_bytes})"
                 )
+            if expected_bytes > max_tensor_bytes:
+                raise FrameValidationError(
+                    f"Decoded tensor size {expected_bytes} exceeds limit {max_tensor_bytes}"
+                )
         else:
             if not self.scale_shape or not self.scale_dtype or not self.original_shape or not self.original_dtype:
                 raise FrameValidationError("Missing required FP8 scale or shape metadata for quantized frame")
-            quant_elem_size = DTYPE_BYTE_SIZES.get(self.dtype, 1)
-            quant_numel = 1
-            for d in self.shape:
-                quant_numel *= d
-            quant_bytes = quant_numel * quant_elem_size
+            if self.original_dtype != manifest.dtype:
+                raise FrameValidationError(
+                    f"Quantized frame original_dtype '{self.original_dtype}' does not match manifest dtype '{manifest.dtype}'"
+                )
+            if len(self.original_shape) != 4:
+                raise FrameValidationError(
+                    f"Quantized original shape must be 4D [batch, seq_len, num_heads, head_dim], got {self.original_shape}"
+                )
+            if self.original_shape[1] != manifest.seq_len:
+                raise FrameValidationError(
+                    f"Quantized frame original seq_len ({self.original_shape[1]}) does not match manifest seq_len ({manifest.seq_len})"
+                )
+            if self.original_shape[2] != declared_num_heads:
+                raise FrameValidationError(
+                    f"Quantized frame original heads ({self.original_shape[2]}) does not match declared heads ({declared_num_heads})"
+                )
+            if self.original_shape[3] != manifest.head_dim:
+                raise FrameValidationError(
+                    f"Quantized frame head_dim ({self.original_shape[3]}) does not match manifest head_dim ({manifest.head_dim})"
+                )
+            if self.block_size_tokens != manifest.block_size_tokens:
+                raise FrameValidationError(
+                    f"Quantized frame block_size ({self.block_size_tokens}) does not match manifest ({manifest.block_size_tokens})"
+                )
 
+            # Validate FP8 scale factor geometry
+            block_size = manifest.block_size_tokens
+            expected_num_blocks = (manifest.seq_len + block_size - 1) // block_size
+            expected_scale_shape = [expected_num_blocks]
+            if list(self.scale_shape) != expected_scale_shape:
+                raise FrameValidationError(
+                    f"Invalid FP8 scale shape {self.scale_shape}, expected {expected_scale_shape}"
+                )
+
+            expected_quant_shape = [expected_num_blocks, block_size * declared_num_heads * manifest.head_dim]
+            if list(self.shape) != expected_quant_shape:
+                raise FrameValidationError(
+                    f"Invalid FP8 quantized data shape {self.shape}, expected {expected_quant_shape}"
+                )
+
+            quant_elem_size = DTYPE_BYTE_SIZES.get(self.dtype, 1)
+            quant_bytes = math.prod(self.shape) * quant_elem_size
             scale_elem_size = DTYPE_BYTE_SIZES.get(self.scale_dtype, 4)
-            scale_numel = 1
-            for d in self.scale_shape:
-                scale_numel *= d
-            scale_bytes = scale_numel * scale_elem_size
+            scale_bytes = math.prod(self.scale_shape) * scale_elem_size
 
             expected_bytes = quant_bytes + scale_bytes
             if self.body_bytes != expected_bytes:
@@ -228,15 +392,33 @@ class FrameMetadata:
                     f"Quantized frame body_bytes ({self.body_bytes}) does not match quant + scale expected bytes ({expected_bytes})"
                 )
 
+            # Check decoded tensor size against allocation limit
+            orig_elem_size = DTYPE_BYTE_SIZES.get(self.original_dtype, 4)
+            decoded_bytes = math.prod(self.original_shape) * orig_elem_size
+            if decoded_bytes > max_tensor_bytes:
+                raise FrameValidationError(
+                    f"Decoded tensor size {decoded_bytes} exceeds limit {max_tensor_bytes}"
+                )
 
-def recv_exact(sock: socket.socket, n_bytes: int, timeout: float = DEFAULT_TIMEOUT) -> bytes:
+
+def recv_exact(
+    sock: socket.socket,
+    n_bytes: int,
+    timeout: float = DEFAULT_TIMEOUT,
+    max_bytes: int = MAX_PAYLOAD_BYTES,
+) -> bytes:
     """
-    Read exactly n_bytes from socket with strict deadline enforcement.
+    Read exactly n_bytes from socket with strict deadline enforcement and allocation cap.
     Raises IncompleteTransferError if connection terminates prematurely.
     Raises TransportTimeoutError if deadline expires.
+    Raises FrameValidationError if requested allocation exceeds max_bytes.
     """
     if n_bytes < 0:
         raise ValueError(f"n_bytes must be non-negative, got {n_bytes}")
+    if n_bytes > max_bytes:
+        raise FrameValidationError(
+            f"Requested allocation of {n_bytes} bytes exceeds configured limit ({max_bytes} bytes)"
+        )
     if n_bytes == 0:
         return b""
 
@@ -293,8 +475,7 @@ def send_manifest(sock: socket.socket, manifest: RequestManifest) -> WireAccount
 
 def recv_manifest(sock: socket.socket, timeout: float = DEFAULT_TIMEOUT) -> Tuple[RequestManifest, WireAccounting]:
     """Receive and validate RequestManifest packet from the socket."""
-    # 1. Read framing header (4 bytes magic + 4 bytes length)
-    header_bytes = recv_exact(sock, 8, timeout=timeout)
+    header_bytes = recv_exact(sock, 8, timeout=timeout, max_bytes=8)
     magic = header_bytes[:4]
     if magic != MAGIC_MANIFEST:
         raise CorruptedFrameError(f"Invalid manifest magic: expected {MAGIC_MANIFEST}, got {magic}")
@@ -303,12 +484,13 @@ def recv_manifest(sock: socket.socket, timeout: float = DEFAULT_TIMEOUT) -> Tupl
     if meta_len <= 0 or meta_len > MAX_METADATA_BYTES:
         raise ManifestValidationError(f"Manifest length {meta_len} out of allowed bounds [1, {MAX_METADATA_BYTES}]")
 
-    # 2. Read manifest JSON body
-    json_bytes = recv_exact(sock, meta_len, timeout=timeout)
+    json_bytes = recv_exact(sock, meta_len, timeout=timeout, max_bytes=MAX_METADATA_BYTES)
     try:
         data = json.loads(json_bytes.decode("utf-8"))
         manifest = RequestManifest(**data)
         manifest.validate()
+    except (ManifestValidationError, CorruptedFrameError):
+        raise
     except Exception as e:
         raise ManifestValidationError(f"Failed to decode or validate RequestManifest: {e}") from e
 
@@ -343,9 +525,13 @@ def recv_frame(
     sock: socket.socket,
     manifest: RequestManifest,
     timeout: float = DEFAULT_TIMEOUT,
+    max_payload_bytes: int = MAX_PAYLOAD_BYTES,
+    cumulative_bytes: int = 0,
+    max_request_bytes: int = MAX_REQUEST_BYTES,
+    plan: Optional[KVPartitionPlan] = None,
 ) -> Tuple[FrameMetadata, bytes, WireAccounting]:
     """Receive individual tensor frame from socket with bounded validation."""
-    header_bytes = recv_exact(sock, 8, timeout=timeout)
+    header_bytes = recv_exact(sock, 8, timeout=timeout, max_bytes=8)
     magic = header_bytes[:4]
     if magic != MAGIC_FRAME:
         raise CorruptedFrameError(f"Invalid frame magic: expected {MAGIC_FRAME}, got {magic}")
@@ -354,16 +540,28 @@ def recv_frame(
     if meta_len <= 0 or meta_len > MAX_METADATA_BYTES:
         raise FrameValidationError(f"Frame metadata length {meta_len} out of bounds")
 
-    json_bytes = recv_exact(sock, meta_len, timeout=timeout)
+    json_bytes = recv_exact(sock, meta_len, timeout=timeout, max_bytes=MAX_METADATA_BYTES)
     try:
         data = json.loads(json_bytes.decode("utf-8"))
         meta = FrameMetadata(**data)
-        meta.validate(manifest)
+        meta.validate(manifest, plan=plan, max_payload_bytes=max_payload_bytes)
+    except (MismatchedRequestError, FrameValidationError, ManifestValidationError, CorruptedFrameError):
+        raise
     except Exception as e:
-        raise FrameValidationError(f"Failed to decode or validate FrameMetadata: {e}") from e
+        raise FrameValidationError(f"Failed to decode FrameMetadata: {e}") from e
 
-    # Read binary body
-    body = recv_exact(sock, meta.body_bytes, timeout=timeout)
+    # Explicit check before allocating buffer
+    if meta.body_bytes > max_payload_bytes:
+        raise FrameValidationError(
+            f"Frame body size {meta.body_bytes} exceeds maximum allowed payload limit {max_payload_bytes}"
+        )
+    if cumulative_bytes + meta.body_bytes > max_request_bytes:
+        raise FrameValidationError(
+            f"Cumulative transfer size {cumulative_bytes + meta.body_bytes} exceeds request limit {max_request_bytes}"
+        )
+
+    # Read binary body with bounded allocation
+    body = recv_exact(sock, meta.body_bytes, timeout=timeout, max_bytes=max_payload_bytes)
 
     accounting = WireAccounting(
         framing_bytes=8,
@@ -376,29 +574,67 @@ def recv_frame(
 class KVCacheFrameAccumulator:
     """
     Accumulates, validates, and reassembles incoming KV frames for a request.
-    Strictly checks for duplicate frames and complete layer coverage.
+    Strictly verifies partition plan ownership, destination, complete head coverage,
+    sequence dimensions, dtypes, and FP8 scale geometry against KVPartitionPlan.
     """
 
-    def __init__(self, manifest: RequestManifest):
+    def __init__(
+        self,
+        manifest: RequestManifest,
+        max_request_bytes: int = MAX_REQUEST_BYTES,
+    ):
         self.manifest = manifest
+        self.max_request_bytes = max_request_bytes
+        self.plan = KVPartitionPlan.create(manifest.num_kv_heads, manifest.prefill_tp, manifest.decode_tp)
+        self.target_decode_rank = manifest.decode_rank
+        self.expected_slice = self.plan.decode_head_slices[self.target_decode_rank]
         self.received_frames: Dict[Tuple[int, str, int, int, int], Tuple[FrameMetadata, bytes]] = {}
         self.accounting = WireAccounting()
+        self.cumulative_body_bytes = 0
 
     def add_frame(self, meta: FrameMetadata, body: bytes, accounting: WireAccounting) -> None:
+        # Validate frame against manifest and plan
+        meta.validate(self.manifest, plan=self.plan)
+
+        if meta.decode_rank != self.target_decode_rank:
+            raise FrameValidationError(
+                f"Frame decode_rank {meta.decode_rank} does not match accumulator target {self.target_decode_rank}"
+            )
+
+        if self.cumulative_body_bytes + meta.body_bytes > self.max_request_bytes:
+            raise FrameValidationError(
+                f"Cumulative request body bytes {self.cumulative_body_bytes + meta.body_bytes} "
+                f"exceeds maximum allowed limit {self.max_request_bytes}"
+            )
+
+        # Check for duplicate frame
         key = (meta.layer_idx, meta.kv_type, meta.prefill_rank, meta.start_head_idx, meta.end_head_idx)
         if key in self.received_frames:
             raise FrameValidationError(
                 f"Duplicate frame received for layer={meta.layer_idx}, type={meta.kv_type}, "
                 f"rank={meta.prefill_rank}, heads=[{meta.start_head_idx}:{meta.end_head_idx}]"
             )
+
+        # Check for overlapping head ranges in the same (layer_idx, kv_type)
+        new_slice = KVHeadSlice(start_head_idx=meta.start_head_idx, end_head_idx=meta.end_head_idx)
+        for (l, kv, r, s, e) in self.received_frames.keys():
+            if l == meta.layer_idx and kv == meta.kv_type:
+                existing_slice = KVHeadSlice(start_head_idx=s, end_head_idx=e)
+                if new_slice.overlaps_with(existing_slice):
+                    raise FrameValidationError(
+                        f"Overlapping head slice [{meta.start_head_idx}:{meta.end_head_idx}] from rank {meta.prefill_rank} "
+                        f"overlaps with existing frame [{s}:{e}] from rank {r} on layer {l} ({kv})"
+                    )
+
         self.received_frames[key] = (meta, body)
         self.accounting = self.accounting.add(accounting)
+        self.cumulative_body_bytes += meta.body_bytes
 
     def is_complete(self) -> bool:
         return len(self.received_frames) == self.manifest.expected_frames
 
     def validate_completeness(self) -> None:
-        """Verify that every layer, kv_type, and prefill rank slice is present."""
+        """Verify that every layer and kv_type has complete, contiguous head coverage with no gaps."""
         if not self.is_complete():
             raise FrameValidationError(
                 f"Incomplete KV cache: received {len(self.received_frames)} of {self.manifest.expected_frames} frames"
@@ -406,16 +642,26 @@ class KVCacheFrameAccumulator:
 
         for l in range(self.manifest.num_layers):
             for kv in ("key", "value"):
-                for p in range(self.manifest.prefill_tp):
-                    # Check that rank p is present for layer l
-                    matching = [
-                        k for k in self.received_frames.keys()
-                        if k[0] == l and k[1] == kv and k[2] == p
-                    ]
-                    if not matching:
+                layer_frames = [
+                    (meta, body)
+                    for (layer_idx, kv_type, _, _, _), (meta, body) in self.received_frames.items()
+                    if layer_idx == l and kv_type == kv
+                ]
+                layer_frames.sort(key=lambda item: item[0].start_head_idx)
+
+                curr_head = self.expected_slice.start_head_idx
+                for meta, _ in layer_frames:
+                    if meta.start_head_idx != curr_head:
                         raise FrameValidationError(
-                            f"Missing frame for layer={l}, kv_type='{kv}', prefill_rank={p}"
+                            f"Head range gap on layer {l} ({kv}): expected head {curr_head}, got {meta.start_head_idx}"
                         )
+                    curr_head = meta.end_head_idx
+
+                if curr_head != self.expected_slice.end_head_idx:
+                    raise FrameValidationError(
+                        f"Incomplete head coverage on layer {l} ({kv}): ended at head {curr_head}, "
+                        f"expected {self.expected_slice.end_head_idx}"
+                    )
 
     def reconstruct_cache(self) -> Dict[str, List[torch.Tensor]]:
         """
@@ -431,22 +677,18 @@ class KVCacheFrameAccumulator:
 
         for l in range(self.manifest.num_layers):
             for kv_type in ("key", "value"):
-                # Collect and sort shards across prefill ranks along head dimension
                 layer_frames = [
                     (meta, body)
                     for (layer_idx, kv, rank, start, end), (meta, body) in self.received_frames.items()
                     if layer_idx == l and kv == kv_type
                 ]
-                # Sort by start_head_idx to stitch heads in order
                 layer_frames.sort(key=lambda item: item[0].start_head_idx)
 
                 shards = []
                 for meta, body in layer_frames:
                     if meta.is_quantized:
                         quant_elem_size = DTYPE_BYTE_SIZES.get(meta.dtype, 1)
-                        quant_numel = 1
-                        for d in meta.shape:
-                            quant_numel *= d
+                        quant_numel = math.prod(meta.shape)
                         quant_bytes = quant_numel * quant_elem_size
                         quant_buf = bytearray(body[:quant_bytes])
                         scale_buf = bytearray(body[quant_bytes:])
@@ -466,7 +708,6 @@ class KVCacheFrameAccumulator:
                         restored_t = dequantize_kv_block_fp8(payload)
                         shards.append(restored_t)
                     else:
-                        # Parse tensor from contiguous buffer
                         t = torch.frombuffer(bytearray(body), dtype=dtype).view(meta.shape)
                         shards.append(t)
 
@@ -485,3 +726,4 @@ class KVCacheFrameAccumulator:
     def reconstruct_uncompressed_cache(self) -> Dict[str, List[torch.Tensor]]:
         """Backwards compatibility alias for reconstruct_cache."""
         return self.reconstruct_cache()
+

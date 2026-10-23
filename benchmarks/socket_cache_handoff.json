@@ -3,11 +3,11 @@
   "enable_fp8": false,
   "block_size_tokens": 16,
   "pids": {
-    "orchestrator_pid": 33996,
-    "producer_pid": 34002,
-    "consumer_pid": 33998
+    "orchestrator_pid": 37182,
+    "producer_pid": 37186,
+    "consumer_pid": 37184
   },
-  "assigned_port": 55259,
+  "assigned_port": 56334,
   "all_tokens_match": true,
   "max_abs_logit_divergence": 0.0,
   "mean_cosine_similarity": 1.0,
@@ -17,9 +17,9 @@
   "reconstructed_generated_text": " the use of different",
   "wire_accounting": {
     "framing_bytes": 776,
-    "metadata_bytes": 34507,
+    "metadata_bytes": 34525,
     "body_bytes": 172032,
-    "total_wire_bytes": 207315,
+    "total_wire_bytes": 207333,
     "uncompressed_fp32_bytes": 172032,
     "uncompressed_fp16_bytes": 86016,
     "ratio_vs_fp32": 1.0,

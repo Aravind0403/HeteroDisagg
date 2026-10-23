@@ -43,6 +43,7 @@ from hetero_kv.transport import (
     recv_manifest,
     send_frame,
     recv_frame,
+    validate_manifest_compatibility,
     KVCacheFrameAccumulator,
     DEFAULT_TIMEOUT,
     TransportError,
@@ -64,8 +65,8 @@ def decode_consumer_worker(
     1. Binds to OS-assigned port on 127.0.0.1.
     2. Signals ready and puts port into port_queue.
     3. Accepts connection from prefill producer.
-    4. Receives and validates RequestManifest.
-    5. Receives all frames, accumulating and validating against manifest.
+    4. Receives and validates RequestManifest against expected model config.
+    5. Receives all frames, accumulating and validating against plan and manifest.
     6. Reconstructs DynamicCache and decodes `decode_steps` continuation tokens.
     7. Returns results and process telemetry to result_queue.
     """
@@ -87,26 +88,39 @@ def decode_consumer_worker(
         conn, addr = server_sock.accept()
         conn.settimeout(timeout)
 
-        # 1. Receive and validate request manifest
-        manifest, manifest_acc = recv_manifest(conn, timeout=timeout)
-        total_acc = manifest_acc
-
-        # 2. Accumulate incoming frames
-        accumulator = KVCacheFrameAccumulator(manifest)
-        while not accumulator.is_complete():
-            meta, body, frame_acc = recv_frame(conn, manifest, timeout=timeout)
-            accumulator.add_frame(meta, body, frame_acc)
-            total_acc = total_acc.add(frame_acc)
-
-        # 3. Validate complete frame set before decoding
-        accumulator.validate_completeness()
-        raw_cache_dict = accumulator.reconstruct_cache()
-
-        # 4. Load local model to run decoding with reconstructed cache
+        # 1. Load local model to inspect config and run decoding
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32)
         model.eval()
 
+        # 2. Receive and validate request manifest against consumer's expected model config
+        manifest, manifest_acc = recv_manifest(conn, timeout=timeout)
+        validate_manifest_compatibility(
+            manifest=manifest,
+            model_config=model.config,
+            expected_model_id=model_id,
+            expected_decode_rank=0,
+        )
+        total_acc = manifest_acc
+
+        # 3. Accumulate incoming frames with strict layout and plan validation
+        accumulator = KVCacheFrameAccumulator(manifest)
+        while not accumulator.is_complete():
+            meta, body, frame_acc = recv_frame(
+                conn,
+                manifest,
+                timeout=timeout,
+                cumulative_bytes=accumulator.cumulative_body_bytes,
+                plan=accumulator.plan,
+            )
+            accumulator.add_frame(meta, body, frame_acc)
+            total_acc = total_acc.add(frame_acc)
+
+        # 4. Validate complete frame set before decoding
+        accumulator.validate_completeness()
+        raw_cache_dict = accumulator.reconstruct_cache()
+
+        # 5. Populate cache and decode continuation tokens
         reconstructed_cache = DynamicCache()
         for l in range(manifest.num_layers):
             reconstructed_cache.update(
@@ -115,7 +129,6 @@ def decode_consumer_worker(
                 layer_idx=l,
             )
 
-        # 5. Decode continuation tokens
         curr_cache = reconstructed_cache
         curr_token = torch.tensor([[manifest.initial_decode_token]], device=device)
         generated_tokens: List[int] = []
@@ -253,6 +266,7 @@ def prefill_producer_worker(
             dtype="float32",
             enable_fp8=enable_fp8,
             block_size_tokens=block_size_tokens,
+            decode_rank=0,
         )
 
         acc = send_manifest(client_sock, manifest)
@@ -369,69 +383,97 @@ def run_socket_cache_handoff_experiment(
     consumer_result_queue = ctx.Queue()
     producer_result_queue = ctx.Queue()
 
-    # 1. Start Consumer process
-    consumer_proc = ctx.Process(
-        target=decode_consumer_worker,
-        args=(port_queue, consumer_result_queue, model_id, decode_steps, device, timeout),
-    )
-    consumer_proc.start()
+    consumer_proc: Optional[mp.Process] = None
+    producer_proc: Optional[mp.Process] = None
+    temp_logits_path: Optional[str] = None
 
-    # Wait for consumer readiness and assigned port
-    ready_info = port_queue.get(timeout=timeout)
-    assigned_port = ready_info["port"]
-    consumer_pid = ready_info["pid"]
-
-    # 2. Start Producer process
-    producer_proc = ctx.Process(
-        target=prefill_producer_worker,
-        args=(
-            assigned_port,
-            producer_result_queue,
-            model_id,
-            prompt,
-            prefill_tp,
-            decode_tp,
-            device,
-            enable_fp8,
-            block_size_tokens,
-            timeout,
-        ),
-    )
-    producer_proc.start()
-
-    # Wait for results from queues with bounded deadline
-    producer_res = producer_result_queue.get(timeout=timeout + 30)
-    consumer_res = consumer_result_queue.get(timeout=timeout + 30)
-
-    # Join child processes boundedly
-    producer_proc.join(timeout=10)
-    consumer_proc.join(timeout=10)
-
-    # Guarantee process termination
-    if producer_proc.is_alive():
-        producer_proc.terminate()
-    if consumer_proc.is_alive():
-        consumer_proc.terminate()
-
-    if producer_res["status"] != "success":
-        raise RuntimeError(f"Producer failed: {producer_res}")
-    if consumer_res["status"] != "success":
-        raise RuntimeError(f"Consumer failed: {consumer_res}")
-
-    producer_pid = producer_res["producer_pid"]
-    main_pid = os.getpid()
-
-    # Confirm distinct processes
-    assert len({main_pid, producer_pid, consumer_pid}) == 3, (
-        f"Processes must be distinct! Main: {main_pid}, Producer: {producer_pid}, Consumer: {consumer_pid}"
-    )
-
-    # Load consumer logits from temp file and clean up
-    temp_logits_path = consumer_res["temp_logits_path"]
     try:
+        # 1. Start Consumer process
+        consumer_proc = ctx.Process(
+            target=decode_consumer_worker,
+            args=(port_queue, consumer_result_queue, model_id, decode_steps, device, timeout),
+        )
+        consumer_proc.start()
+
+        # Wait for consumer readiness and assigned port
+        ready_info = port_queue.get(timeout=timeout)
+        assigned_port = ready_info["port"]
+        consumer_pid = ready_info["pid"]
+
+        # 2. Start Producer process
+        producer_proc = ctx.Process(
+            target=prefill_producer_worker,
+            args=(
+                assigned_port,
+                producer_result_queue,
+                model_id,
+                prompt,
+                prefill_tp,
+                decode_tp,
+                device,
+                enable_fp8,
+                block_size_tokens,
+                timeout,
+            ),
+        )
+        producer_proc.start()
+
+        # Wait for results from queues with bounded deadline
+        producer_res = producer_result_queue.get(timeout=timeout + 30)
+        consumer_res = consumer_result_queue.get(timeout=timeout + 30)
+
+        # Join child processes boundedly
+        producer_proc.join(timeout=10)
+        consumer_proc.join(timeout=10)
+
+        if producer_res["status"] != "success":
+            raise RuntimeError(f"Producer failed: {producer_res}")
+        if consumer_res["status"] != "success":
+            raise RuntimeError(f"Consumer failed: {consumer_res}")
+
+        producer_pid = producer_res["producer_pid"]
+        main_pid = os.getpid()
+
+        # Confirm distinct processes
+        assert len({main_pid, producer_pid, consumer_pid}) == 3, (
+            f"Processes must be distinct! Main: {main_pid}, Producer: {producer_pid}, Consumer: {consumer_pid}"
+        )
+
+        # Load consumer logits from temp file
+        temp_logits_path = consumer_res["temp_logits_path"]
         consumer_logits_tensor = torch.load(temp_logits_path, weights_only=True)
     finally:
-        if os.path.exists(temp_logits_path):
+        # Guarantee child-process termination and join on all exit paths (success, error, or timeout)
+        if producer_proc is not None:
+            try:
+                if producer_proc.is_alive():
+                    producer_proc.terminate()
+                producer_proc.join(timeout=2.0)
+                if producer_proc.is_alive():
+                    producer_proc.kill()
+                    producer_proc.join(timeout=1.0)
+            except Exception:
+                pass
+
+        if consumer_proc is not None:
+            try:
+                if consumer_proc.is_alive():
+                    consumer_proc.terminate()
+                consumer_proc.join(timeout=2.0)
+                if consumer_proc.is_alive():
+                    consumer_proc.kill()
+                    consumer_proc.join(timeout=1.0)
+            except Exception:
+                pass
+
+        for q in (port_queue, consumer_result_queue, producer_result_queue):
+            try:
+                q.close()
+                q.cancel_join_thread()
+            except Exception:
+                pass
+
+        if temp_logits_path and os.path.exists(temp_logits_path):
             try:
                 os.remove(temp_logits_path)
             except Exception:
