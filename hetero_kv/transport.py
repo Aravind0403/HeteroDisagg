@@ -45,6 +45,10 @@ MAX_TENSOR_BYTES = 1024 * 1024 * 1024         # 1 GB max decoded tensor size
 MAX_REQUEST_BYTES = 16 * 1024 * 1024 * 1024   # 16 GB max cumulative bytes for a single request
 DEFAULT_TIMEOUT = 10.0                         # 10s default socket timeout
 
+SUPPORTED_UNCOMPRESSED_DTYPES = {"float32", "float16", "bfloat16"}
+SUPPORTED_QUANTIZED_DTYPES = {"float8_e4m3fn", "int8"}
+SUPPORTED_SCALE_DTYPES = {"float32", "float16", "bfloat16"}
+
 DTYPE_BYTE_SIZES = {
     "float32": 4,
     "float16": 2,
@@ -85,7 +89,7 @@ class CorruptedFrameError(TransportError):
 
 
 class MismatchedRequestError(TransportError):
-    """Request ID, model identity, or destination rank mismatch."""
+    """Request ID, model identity, checkpoint revision, or destination rank mismatch."""
     pass
 
 
@@ -158,8 +162,10 @@ class RequestManifest:
             raise ManifestValidationError(
                 f"decode_rank {self.decode_rank} out of bounds [0, {self.decode_tp - 1}]"
             )
-        if self.dtype not in DTYPE_BYTE_SIZES:
-            raise ManifestValidationError(f"Unsupported dtype: {self.dtype}")
+        if self.dtype not in SUPPORTED_UNCOMPRESSED_DTYPES:
+            raise ManifestValidationError(
+                f"Unsupported dtype '{self.dtype}', allowed: {sorted(SUPPORTED_UNCOMPRESSED_DTYPES)}"
+            )
 
         # Construct and validate bipartite partition plan
         try:
@@ -181,10 +187,12 @@ def validate_manifest_compatibility(
     model_config: Any,
     expected_model_id: Optional[str] = None,
     expected_decode_rank: Optional[int] = None,
+    expected_checkpoint_commit_hash: Optional[str] = None,
 ) -> None:
     """
     Validates that an incoming RequestManifest matches the receiving consumer's
-    expected model architecture, identity, and target decode rank before accepting cache frames.
+    expected model architecture, identity, checkpoint revision, and target decode rank
+    before accepting cache frames.
     """
     manifest.validate()
 
@@ -192,6 +200,19 @@ def validate_manifest_compatibility(
         raise MismatchedRequestError(
             f"Manifest model_id '{manifest.model_id}' does not match consumer expected '{expected_model_id}'"
         )
+
+    # Validate resolved checkpoint revision / commit hash
+    resolved_commit_hash = expected_checkpoint_commit_hash or getattr(model_config, "_commit_hash", None)
+    if resolved_commit_hash is not None:
+        if manifest.checkpoint_commit_hash is None:
+            raise MismatchedRequestError(
+                f"Manifest lacks checkpoint revision, but consumer expects revision '{resolved_commit_hash}'"
+            )
+        if manifest.checkpoint_commit_hash != resolved_commit_hash:
+            raise MismatchedRequestError(
+                f"Manifest checkpoint revision '{manifest.checkpoint_commit_hash}' "
+                f"does not match consumer resolved revision '{resolved_commit_hash}'"
+            )
 
     if expected_decode_rank is not None and manifest.decode_rank != expected_decode_rank:
         raise ManifestValidationError(
@@ -303,8 +324,10 @@ class FrameMetadata:
         declared_num_heads = self.end_head_idx - self.start_head_idx
 
         if not self.is_quantized:
-            if self.dtype not in DTYPE_BYTE_SIZES:
-                raise FrameValidationError(f"Invalid frame dtype: {self.dtype}")
+            if self.dtype not in SUPPORTED_UNCOMPRESSED_DTYPES:
+                raise FrameValidationError(
+                    f"Unsupported uncompressed frame dtype '{self.dtype}', allowed: {sorted(SUPPORTED_UNCOMPRESSED_DTYPES)}"
+                )
             if self.dtype != manifest.dtype:
                 raise FrameValidationError(
                     f"Frame dtype '{self.dtype}' does not match manifest dtype '{manifest.dtype}'"
@@ -312,6 +335,10 @@ class FrameMetadata:
             if len(self.shape) != 4:
                 raise FrameValidationError(
                     f"Uncompressed frame shape must be 4D [batch, seq_len, num_heads, head_dim], got {self.shape}"
+                )
+            if self.shape[0] != 1:
+                raise FrameValidationError(
+                    f"Batch dimension {self.shape[0]} not supported; codec requires batch size 1"
                 )
             if self.shape[1] != manifest.seq_len:
                 raise FrameValidationError(
@@ -341,6 +368,18 @@ class FrameMetadata:
         else:
             if not self.scale_shape or not self.scale_dtype or not self.original_shape or not self.original_dtype:
                 raise FrameValidationError("Missing required FP8 scale or shape metadata for quantized frame")
+            if self.dtype not in SUPPORTED_QUANTIZED_DTYPES:
+                raise FrameValidationError(
+                    f"Unsupported FP8 quantized dtype '{self.dtype}', allowed: {sorted(SUPPORTED_QUANTIZED_DTYPES)}"
+                )
+            if self.scale_dtype not in SUPPORTED_SCALE_DTYPES:
+                raise FrameValidationError(
+                    f"Unsupported FP8 scale dtype '{self.scale_dtype}', allowed: {sorted(SUPPORTED_SCALE_DTYPES)}"
+                )
+            if self.original_dtype not in SUPPORTED_UNCOMPRESSED_DTYPES:
+                raise FrameValidationError(
+                    f"Unsupported FP8 original dtype '{self.original_dtype}', allowed: {sorted(SUPPORTED_UNCOMPRESSED_DTYPES)}"
+                )
             if self.original_dtype != manifest.dtype:
                 raise FrameValidationError(
                     f"Quantized frame original_dtype '{self.original_dtype}' does not match manifest dtype '{manifest.dtype}'"
@@ -348,6 +387,10 @@ class FrameMetadata:
             if len(self.original_shape) != 4:
                 raise FrameValidationError(
                     f"Quantized original shape must be 4D [batch, seq_len, num_heads, head_dim], got {self.original_shape}"
+                )
+            if self.original_shape[0] != 1:
+                raise FrameValidationError(
+                    f"Batch dimension {self.original_shape[0]} not supported; codec requires batch size 1"
                 )
             if self.original_shape[1] != manifest.seq_len:
                 raise FrameValidationError(

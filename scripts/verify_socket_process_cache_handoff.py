@@ -21,7 +21,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import json
 import socket
+import tempfile
 import time
+import uuid
 import multiprocessing as mp
 from typing import Dict, Any, List, Tuple, Optional
 import click
@@ -59,6 +61,7 @@ def decode_consumer_worker(
     decode_steps: int = 4,
     device: str = "cpu",
     timeout: float = DEFAULT_TIMEOUT,
+    temp_logits_path: Optional[str] = None,
 ) -> None:
     """
     Consumer Process (Worker B):
@@ -83,7 +86,8 @@ def decode_consumer_worker(
     port_queue.put({"port": assigned_port, "pid": consumer_pid})
 
     conn: Optional[socket.socket] = None
-    temp_logits_path = f"/tmp/hkv_consumer_logits_{consumer_pid}.pt"
+    if temp_logits_path is None:
+        temp_logits_path = f"/tmp/hkv_consumer_logits_{consumer_pid}.pt"
     try:
         conn, addr = server_sock.accept()
         conn.settimeout(timeout)
@@ -383,15 +387,18 @@ def run_socket_cache_handoff_experiment(
     consumer_result_queue = ctx.Queue()
     producer_result_queue = ctx.Queue()
 
+    # Parent allocates and owns temporary file path before starting workers
+    temp_dir = tempfile.gettempdir()
+    temp_logits_path = os.path.join(temp_dir, f"hkv_logits_{os.getpid()}_{uuid.uuid4().hex}.pt")
+
     consumer_proc: Optional[mp.Process] = None
     producer_proc: Optional[mp.Process] = None
-    temp_logits_path: Optional[str] = None
 
     try:
-        # 1. Start Consumer process
+        # 1. Start Consumer process with parent-owned temp path
         consumer_proc = ctx.Process(
             target=decode_consumer_worker,
-            args=(port_queue, consumer_result_queue, model_id, decode_steps, device, timeout),
+            args=(port_queue, consumer_result_queue, model_id, decode_steps, device, timeout, temp_logits_path),
         )
         consumer_proc.start()
 
@@ -440,7 +447,6 @@ def run_socket_cache_handoff_experiment(
         )
 
         # Load consumer logits from temp file
-        temp_logits_path = consumer_res["temp_logits_path"]
         consumer_logits_tensor = torch.load(temp_logits_path, weights_only=True)
     finally:
         # Guarantee child-process termination and join on all exit paths (success, error, or timeout)

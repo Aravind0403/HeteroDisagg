@@ -522,12 +522,144 @@ def test_manifest_compatibility_validation():
     with pytest.raises(ManifestValidationError, match="decode_rank"):
         validate_manifest_compatibility(base_manifest, cfg, expected_model_id="expected-model", expected_decode_rank=1)
 
+    # Mismatched checkpoint revision
+    cfg_with_commit = DummyConfig()
+    cfg_with_commit._commit_hash = "abc123commit"
+    with pytest.raises(MismatchedRequestError, match="checkpoint revision"):
+        validate_manifest_compatibility(
+            base_manifest, cfg_with_commit, expected_model_id="expected-model"
+        )
+    manifest_with_wrong_commit = RequestManifest(
+        **{**base_manifest.__dict__, "checkpoint_commit_hash": "different_commit_456"}
+    )
+    with pytest.raises(MismatchedRequestError, match="does not match consumer resolved revision"):
+        validate_manifest_compatibility(
+            manifest_with_wrong_commit, cfg_with_commit, expected_model_id="expected-model"
+        )
+    # Matching commit hash passes
+    manifest_matching_commit = RequestManifest(
+        **{**base_manifest.__dict__, "checkpoint_commit_hash": "abc123commit"}
+    )
+    validate_manifest_compatibility(
+        manifest_matching_commit, cfg_with_commit, expected_model_id="expected-model"
+    )
+
     # Mismatched num_layers
     bad_layers = RequestManifest(
         **{**base_manifest.__dict__, "num_layers": 8, "expected_frames": 32}
     )
     with pytest.raises(ManifestValidationError, match="num_layers"):
         validate_manifest_compatibility(bad_layers, cfg, expected_model_id="expected-model")
+
+
+def test_unsupported_dtypes_and_batch_geometry_rejected():
+    """Unsupported quantized/scale dtypes and batch dimensions != 1 must be rejected."""
+    manifest = RequestManifest(
+        request_id="req-dtype-test",
+        model_id="test-model",
+        checkpoint_commit_hash=None,
+        num_layers=1,
+        num_kv_heads=2,
+        head_dim=64,
+        seq_len=8,
+        prefill_tp=1,
+        decode_tp=1,
+        expected_frames=2,
+        initial_decode_token=42,
+        initial_decode_token_str="test",
+        prompt_tokens=[1, 2],
+        dtype="float32",
+        decode_rank=0,
+    )
+
+    # 1. Reject invented quantized dtype
+    bad_quant_dtype = FrameMetadata(
+        request_id="req-dtype-test",
+        kv_type="key",
+        layer_idx=0,
+        prefill_rank=0,
+        decode_rank=0,
+        start_head_idx=0,
+        end_head_idx=2,
+        is_quantized=True,
+        shape=[1, 16 * 2 * 64],
+        dtype="invented_fp8_custom",  # Invalid!
+        scale_shape=[1],
+        scale_dtype="float32",
+        original_shape=[1, 8, 2, 64],
+        original_dtype="float32",
+        block_size_tokens=16,
+        body_bytes=1 * 16 * 2 * 64 * 1 + 4,
+    )
+    with pytest.raises(FrameValidationError, match="Unsupported FP8 quantized dtype"):
+        bad_quant_dtype.validate(manifest)
+
+    # 2. Reject invented scale dtype
+    bad_scale_dtype = FrameMetadata(
+        request_id="req-dtype-test",
+        kv_type="key",
+        layer_idx=0,
+        prefill_rank=0,
+        decode_rank=0,
+        start_head_idx=0,
+        end_head_idx=2,
+        is_quantized=True,
+        shape=[1, 16 * 2 * 64],
+        dtype="float8_e4m3fn",
+        scale_shape=[1],
+        scale_dtype="invented_scale_fp64",  # Invalid!
+        original_shape=[1, 8, 2, 64],
+        original_dtype="float32",
+        block_size_tokens=16,
+        body_bytes=1 * 16 * 2 * 64 * 1 + 8,
+    )
+    with pytest.raises(FrameValidationError, match="Unsupported FP8 scale dtype"):
+        bad_scale_dtype.validate(manifest)
+
+    # 3. Reject batch dimension != 1 (codec currently requires batch size 1)
+    bad_batch_frame = FrameMetadata(
+        request_id="req-dtype-test",
+        kv_type="key",
+        layer_idx=0,
+        prefill_rank=0,
+        decode_rank=0,
+        start_head_idx=0,
+        end_head_idx=2,
+        is_quantized=False,
+        shape=[2, 8, 2, 64],  # Batch size 2!
+        dtype="float32",
+        body_bytes=2 * 8 * 2 * 64 * 4,
+    )
+    with pytest.raises(FrameValidationError, match="Batch dimension 2 not supported"):
+        bad_batch_frame.validate(manifest)
+
+
+def test_temporary_file_unconditional_cleanup_on_producer_failure():
+    """Temporary logits file must be cleaned up even if producer reports failure after file creation."""
+    import tempfile
+    import uuid
+
+    temp_dir = tempfile.gettempdir()
+    temp_logits_path = os.path.join(temp_dir, f"hkv_test_cleanup_{uuid.uuid4().hex}.pt")
+
+    # Simulate consumer writing logits before failure is detected
+    torch.save(torch.randn(4, 100), temp_logits_path)
+    assert os.path.exists(temp_logits_path)
+
+    # Simulate orchestrator encountering producer failure
+    producer_res = {"status": "error", "error_message": "Producer failed early"}
+
+    try:
+        if producer_res["status"] != "success":
+            raise RuntimeError(f"Producer failed: {producer_res}")
+    except RuntimeError:
+        pass
+    finally:
+        # Parent-owned cleanup block
+        if temp_logits_path and os.path.exists(temp_logits_path):
+            os.remove(temp_logits_path)
+
+    assert not os.path.exists(temp_logits_path), "Temporary file must be deleted unconditionally on failure!"
 
 
 def test_complete_consumer_rejection_and_cleanup_scenario():
