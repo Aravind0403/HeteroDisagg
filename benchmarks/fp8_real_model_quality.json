@@ -58,8 +58,11 @@
       "avg_ratio_vs_fp32": 3.24,
       "avg_ratio_vs_fp16": 1.62,
       "avg_tensor_body_reduction_vs_fp16_pct": 38.0,
-      "avg_total_wire_reduction_vs_fp16_pct": 34.7,
-      "avg_wire_reduction_vs_fp16_pct": 38.0
+      "avg_exact_wire_reduction_vs_fp16_pct": 30.4,
+      "avg_estimated_macro_average_wire_reduction_vs_fp16_pct": 34.7,
+      "avg_total_wire_reduction_vs_fp16_pct": 30.4,
+      "avg_wire_reduction_vs_fp16_pct": 38.0,
+      "framing_accounting_method": "measured_actual_serializers"
     }
   },
   "passages": [
@@ -72,13 +75,18 @@
         "uncompressed_fp16_bytes": 147456,
         "tensor_body_bytes_fp8": 98688,
         "wire_payload_bytes": 98688,
+        "exact_wire_bytes_fp16": 182116,
+        "exact_wire_bytes_fp8": 134979,
         "ratio_vs_fp32": 2.99,
         "ratio_vs_fp16": 1.49,
         "tensor_body_reduction_vs_fp16_pct": 33.1,
+        "exact_wire_reduction_vs_fp16_pct": 25.9,
+        "estimated_macro_average_wire_reduction_vs_fp16_pct": 30.0,
+        "total_wire_reduction_vs_fp16_pct": 25.9,
         "wire_reduction_vs_fp16_pct": 33.1,
-        "total_wire_reduction_vs_fp16_pct": 30.0,
         "estimated_full_wire_fp16_bytes": 162656,
-        "estimated_full_wire_fp8_bytes": 113888
+        "estimated_full_wire_fp8_bytes": 113888,
+        "framing_accounting_method": "measured_actual_serializers"
       },
       "boundary_step": {
         "target_token": 21725,
@@ -116,13 +124,18 @@
         "uncompressed_fp16_bytes": 172032,
         "tensor_body_bytes_fp8": 98688,
         "wire_payload_bytes": 98688,
+        "exact_wire_bytes_fp16": 206703,
+        "exact_wire_bytes_fp8": 134990,
         "ratio_vs_fp32": 3.49,
         "ratio_vs_fp16": 1.74,
         "tensor_body_reduction_vs_fp16_pct": 42.6,
+        "exact_wire_reduction_vs_fp16_pct": 34.7,
+        "estimated_macro_average_wire_reduction_vs_fp16_pct": 39.2,
+        "total_wire_reduction_vs_fp16_pct": 34.7,
         "wire_reduction_vs_fp16_pct": 42.6,
-        "total_wire_reduction_vs_fp16_pct": 39.2,
         "estimated_full_wire_fp16_bytes": 187232,
-        "estimated_full_wire_fp8_bytes": 113888
+        "estimated_full_wire_fp8_bytes": 113888,
+        "framing_accounting_method": "measured_actual_serializers"
       },
       "boundary_step": {
         "target_token": 13794,
@@ -160,13 +173,18 @@
         "uncompressed_fp16_bytes": 159744,
         "tensor_body_bytes_fp8": 98688,
         "wire_payload_bytes": 98688,
+        "exact_wire_bytes_fp16": 194405,
+        "exact_wire_bytes_fp8": 134980,
         "ratio_vs_fp32": 3.24,
         "ratio_vs_fp16": 1.62,
         "tensor_body_reduction_vs_fp16_pct": 38.2,
+        "exact_wire_reduction_vs_fp16_pct": 30.6,
+        "estimated_macro_average_wire_reduction_vs_fp16_pct": 34.9,
+        "total_wire_reduction_vs_fp16_pct": 30.6,
         "wire_reduction_vs_fp16_pct": 38.2,
-        "total_wire_reduction_vs_fp16_pct": 34.9,
         "estimated_full_wire_fp16_bytes": 174944,
-        "estimated_full_wire_fp8_bytes": 113888
+        "estimated_full_wire_fp8_bytes": 113888,
+        "framing_accounting_method": "measured_actual_serializers"
       },
       "boundary_step": {
         "target_token": 11879,

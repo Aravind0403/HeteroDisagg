@@ -564,6 +564,16 @@ def send_frame(sock: socket.socket, meta: FrameMetadata, body: bytes) -> WireAcc
     )
 
 
+class ByteCountingSink:
+    """Socket-like destination that tallies serialized wire bytes without network I/O."""
+
+    def __init__(self) -> None:
+        self.bytes_sent: int = 0
+
+    def sendall(self, data: bytes) -> None:
+        self.bytes_sent += len(data)
+
+
 def recv_frame(
     sock: socket.socket,
     manifest: RequestManifest,

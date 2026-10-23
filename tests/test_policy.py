@@ -13,12 +13,8 @@ from hetero_kv.policy import AdaptiveCompressionPolicy, CompressionMode
 
 @pytest.fixture
 def policy():
-    return AdaptiveCompressionPolicy(
-        encoding_throughput_bytes_per_sec=2.0e9,  # 2 GB/s
-        decoding_throughput_bytes_per_sec=4.0e9,  # 4 GB/s
-        framing_overhead_bytes_per_frame=150,
-        min_saving_threshold_ms=0.05,
-    )
+    # Production default configuration
+    return AdaptiveCompressionPolicy()
 
 
 def test_short_prompt_expansion_rejected(policy):
@@ -81,15 +77,20 @@ def test_bandwidth_constrained_long_context_selected(policy):
     assert res.estimated_net_saving_ms > 1.0
 
 
-def test_policy_against_empirical_benchmark_outcomes(policy):
+def test_policy_against_projected_benchmark_outcomes(policy):
     """
-    Validates policy against independently measured empirical benchmark outcomes
-    from benchmarks/transfer_modes_benchmark.json across all bandwidths and sequence lengths.
+    Validates policy decisions against analytical projections recorded in
+    benchmarks/transfer_modes_benchmark.json across all bandwidth tiers and sequence lengths.
     
-    Verifies that:
-    1. Policy matches empirical optimal decision in >= 90% of points.
-    2. Total empirical latency under Policy beats both Always-Compress and Never-Compress.
-    3. Total empirical regret vs the Empirical Oracle is < 1.0%.
+    Validation Note:
+    - This tests against analytical projections (projected_link_e2e_ms), not physical wire measurements.
+    - Uses production default configuration (AdaptiveCompressionPolicy()).
+    - Across the 32-case sweep grid (4 bandwidths x 8 sequence lengths):
+      * Matches projected optimal mode in exactly 30/32 cases (93.75%).
+      * Mean per-case regret vs projected oracle is 0.0488%.
+      * Maximum single-case regret is 1.147% (at 1024 tokens on 1 Gbps where codec scaling reverses the projection).
+      * Calibration/evaluation separation note: The benchmark grid serves as an analytical validation
+        set; real-world deployment requires runtime link probing.
     """
     import json
     from pathlib import Path
@@ -101,19 +102,20 @@ def test_policy_against_empirical_benchmark_outcomes(policy):
         bench_data = json.load(f)
 
     points = bench_data["points"]
-    assert len(points) >= 32, f"Expected at least 32 benchmark scenarios, got {len(points)}"
+    assert len(points) == 32, f"Expected exactly 32 benchmark scenarios, got {len(points)}"
 
     total_lat_policy = 0.0
     total_lat_always_comp = 0.0
     total_lat_never_comp = 0.0
     total_lat_oracle = 0.0
-    matches_empirical_count = 0
+    matches_projected_count = 0
+    per_case_regrets = []
 
     for pt in points:
         seq = pt["seq_len"]
         bw = pt["bandwidth_bytes_per_sec"]
         
-        # Policy prediction (completely blind to measured latency)
+        # Policy prediction (completely blind to measured/projected latency)
         eval_res = policy.evaluate(
             seq_len=seq,
             num_layers=24,
@@ -136,13 +138,18 @@ def test_policy_against_empirical_benchmark_outcomes(policy):
         total_lat_never_comp += u_lat
         total_lat_oracle += oracle_lat
 
+        case_regret = ((policy_lat - oracle_lat) / oracle_lat) * 100.0
+        per_case_regrets.append(case_regret)
+
         if eval_res.selected_mode.value == empirical_winner:
-            matches_empirical_count += 1
+            matches_projected_count += 1
 
-    accuracy = matches_empirical_count / len(points)
-    assert accuracy >= 0.90, f"Policy accuracy vs empirical winner was {accuracy * 100:.1f}%, expected >= 90%"
+    accuracy = matches_projected_count / len(points)
+    # Exact reproduction of production default figures
+    assert matches_projected_count == 30, f"Expected exactly 30 matches, got {matches_projected_count}/{len(points)}"
+    assert round(accuracy * 100, 2) == 93.75, f"Policy accuracy vs projected winner was {accuracy * 100:.2f}%, expected 93.75%"
 
-    # Empirical policy latency must beat both Always-Compress and Never-Compress
+    # Total projected latency under policy must beat both Always-Compress and Never-Compress
     assert total_lat_policy < total_lat_always_comp, (
         f"Policy ({total_lat_policy:.1f} ms) must beat Always-Compress ({total_lat_always_comp:.1f} ms)"
     )
@@ -150,5 +157,7 @@ def test_policy_against_empirical_benchmark_outcomes(policy):
         f"Policy ({total_lat_policy:.1f} ms) must beat Never-Compress ({total_lat_never_comp:.1f} ms)"
     )
 
-    regret_pct = ((total_lat_policy - total_lat_oracle) / total_lat_oracle) * 100.0
-    assert regret_pct < 1.0, f"Empirical regret vs Oracle was {regret_pct:.3f}%, expected < 1.0%"
+    mean_case_regret = sum(per_case_regrets) / len(per_case_regrets)
+    max_case_regret = max(per_case_regrets)
+    assert round(mean_case_regret, 4) == 0.0488, f"Mean per-case regret was {mean_case_regret:.4f}%, expected 0.0488%"
+    assert round(max_case_regret, 3) == 1.147, f"Max single-case regret was {max_case_regret:.4f}%, expected 1.147%"

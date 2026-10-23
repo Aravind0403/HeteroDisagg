@@ -160,3 +160,39 @@ Raw benchmark traces, machine configurations, and JSON outputs are checked into 
 * **Raw JSON Sweep:** [`benchmarks/empirical_decoupled_sweep.json`](file:///Users/aravindsundaresan/Development/HeteroDisagg/benchmarks/empirical_decoupled_sweep.json)
 * **Execution Log:** [`benchmarks/empirical_decoupled_sweep.log`](file:///Users/aravindsundaresan/Development/HeteroDisagg/benchmarks/empirical_decoupled_sweep.log)
 * **Harness Script:** [`scripts/run_decoupled_empirical_benchmark.py`](file:///Users/aravindsundaresan/Development/HeteroDisagg/scripts/run_decoupled_empirical_benchmark.py)
+
+---
+
+## 9. Controlled Cache Transfer Benchmark & Frontier Stability
+
+To isolate the physical transport trade-offs independent of model forward passes, `scripts/benchmark_transfer_modes.py` evaluates three transport regimes across a 32-scenario grid (4 bandwidth tiers × 8 sequence lengths: 8 to 1,024 tokens) under Qwen2.5-0.5B cache geometry (24 layers, 2 KV heads, $d_{\text{head}}=64$):
+1. **Uncompressed FP16 Baseline:** Transmits raw half-precision tensors (`float16`).
+2. **Block-Scaled FP8:** Transmits FP8 E4M3 tensors with per-block scale factors ($B=16$).
+3. **Adaptive Compression Policy:** Production policy (`AdaptiveCompressionPolicy()`) deciding between modes based on cache volume, interconnect bandwidth, and tile padding.
+
+### A. Measurement vs. Analytical Projection Protocol
+- **Empirically Measured:** Wall-clock duration of serialization, socket transmission over loopback TCP, receive validation, and reconstruction. On loopback without network throttling, uncompressed FP16 is always faster locally due to zero quantization compute overhead.
+- **Analytically Projected:** Projected link latency is modeled as:
+  $$T_{\text{projected}} = T_{\text{codec}} + \frac{\text{Measured Wire Bytes}}{\text{Target Bandwidth}}$$
+  where $T_{\text{codec}}$ is the measured quantization and dequantization duration.
+
+### B. Break-Even Frontier at 1 Gbps
+- **First Observed Win:** At **256 tokens**, FP8 achieves its first observed projected speedup over FP16 (24.95 ms vs 28.62 ms, 1.15x).
+- **Continuation:** At **512 tokens**, FP8 maintains its lead (53.07 ms vs 57.60 ms, 1.09x).
+- **Later Reversal at 1024 Tokens:** At **1024 tokens**, FP16 slightly outperforms FP8 (115.64 ms vs 116.12 ms; a 0.48 ms delta, ~0.4%).
+- **Frontier Stability Finding:** On unaccelerated CPU, Python quantization time scales without vectorized AVX/NEON SIMD kernels. We report **256 tokens as the first observed projected win**, note the 1024-token reversal (~0.4% delta consistent with measurement noise and CPU scaling), and avoid claiming every larger prompt unconditionally benefits on CPU. In GPU deployments with compiled Triton/CUDA kernels, quantization is memory-bandwidth bound and amortized across SMs.
+
+### C. Exact Serializer Wire Accounting vs. Estimated Framing
+- Because FP8 frames serialize additional metadata fields (`scale_shape`, `scale_dtype`, `original_shape`, `original_dtype`, `block_size_tokens`) compared to uncompressed FP16 frames, exact wire footprints are captured using `ByteCountingSink` with `send_manifest` and `send_frame`.
+- On the held-out expanded evaluation corpus (`benchmarks/expanded_fp8_quality.json`):
+  * **Measured Net Wire Savings (Actual Serializer Framing):** **37.9% net wire reduction**
+  * **Estimated Macro-Average Wire Savings (Static Framing Heuristic):** **39.2% estimated reduction**
+  * **Pure Tensor-Body Reduction (Excluding Framing):** **40.1% tensor reduction**
+
+### D. Policy Validation Against Analytical Projections
+- Validated in `tests/test_policy.py::test_policy_against_projected_benchmark_outcomes` using production default configuration `AdaptiveCompressionPolicy()`:
+  * **Match Rate:** **30 / 32 cases (93.75%)** match the projected empirical winner.
+  * **Mean Per-Case Regret:** **0.0488%** relative to the projected oracle.
+  * **Maximum Single-Case Regret:** **1.147%** (occurring at 1024 tokens on 1 Gbps where codec scaling inverts the winner).
+  * **Global Latency:** Total policy latency beats both Always-Compress and Never-Compress baselines across the entire sweep grid.
+

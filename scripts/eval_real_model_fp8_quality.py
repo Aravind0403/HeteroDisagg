@@ -41,6 +41,13 @@ from hetero_kv.reshard import (
     package_payloads_from_prefill_rank,
     reassemble_decode_kv,
 )
+from hetero_kv.transport import (
+    RequestManifest,
+    FrameMetadata,
+    send_manifest,
+    send_frame,
+    ByteCountingSink,
+)
 
 console = Console()
 
@@ -168,6 +175,57 @@ def evaluate_passage_fp8_quality(
     plan = KVPartitionPlan.create(num_kv_heads=num_kv_heads, prefill_tp=prefill_tp, decode_tp=decode_tp)
     eval_cache = DynamicCache()
 
+    head_dim = getattr(model.config, "head_dim", None)
+    if head_dim is None and hasattr(model.config, "hidden_size") and hasattr(model.config, "num_attention_heads"):
+        head_dim = model.config.hidden_size // model.config.num_attention_heads
+    if head_dim is None:
+        head_dim = 64
+
+    # Setup ByteCountingSinks to measure exact wire bytes using actual serializers
+    sink_fp16 = ByteCountingSink()
+    sink_fp8 = ByteCountingSink()
+
+    manifest_fp16 = RequestManifest(
+        request_id="fp8_eval_req",
+        model_id=getattr(model.config, "_name_or_path", "model"),
+        checkpoint_commit_hash=getattr(model.config, "_commit_hash", None),
+        num_layers=num_layers,
+        num_kv_heads=num_kv_heads,
+        head_dim=head_dim,
+        seq_len=prompt_len,
+        prefill_tp=prefill_tp,
+        decode_tp=decode_tp,
+        expected_frames=num_layers * 2 * prefill_tp,
+        initial_decode_token=int(target_tokens[0]),
+        initial_decode_token_str=tokenizer.decode([int(target_tokens[0])]),
+        prompt_tokens=ctx_ids[0].tolist(),
+        dtype="float16",
+        enable_fp8=False,
+        block_size_tokens=block_size_tokens,
+        decode_rank=0,
+    )
+    manifest_fp8 = RequestManifest(
+        request_id="fp8_eval_req",
+        model_id=getattr(model.config, "_name_or_path", "model"),
+        checkpoint_commit_hash=getattr(model.config, "_commit_hash", None),
+        num_layers=num_layers,
+        num_kv_heads=num_kv_heads,
+        head_dim=head_dim,
+        seq_len=prompt_len,
+        prefill_tp=prefill_tp,
+        decode_tp=decode_tp,
+        expected_frames=num_layers * 2 * prefill_tp,
+        initial_decode_token=int(target_tokens[0]),
+        initial_decode_token_str=tokenizer.decode([int(target_tokens[0])]),
+        prompt_tokens=ctx_ids[0].tolist(),
+        dtype="float16",
+        enable_fp8=True,
+        block_size_tokens=block_size_tokens,
+        decode_rank=0,
+    )
+    send_manifest(sink_fp16, manifest_fp16)
+    send_manifest(sink_fp8, manifest_fp8)
+
     total_uncompressed_fp32_bytes = 0
     total_wire_bytes = 0
 
@@ -199,6 +257,70 @@ def evaluate_passage_fp8_quality(
         for p in payloads_k:
             total_wire_bytes += p.payload_bytes
 
+            # Count exact wire bytes using actual FrameMetadata serializer
+            if enable_fp8:
+                fp8_data = p.data
+                dtype_str = "float8_e4m3fn" if fp8_data.quantized_data.dtype == getattr(torch, "float8_e4m3fn", None) else "int8"
+                quant_bytes = fp8_data.quantized_data.view(torch.uint8).cpu().numpy().tobytes()
+                scale_bytes = fp8_data.scale_factors.cpu().numpy().tobytes()
+                body_fp8 = quant_bytes + scale_bytes
+                meta_fp8 = FrameMetadata(
+                    request_id="fp8_eval_req",
+                    kv_type="key",
+                    layer_idx=l,
+                    prefill_rank=p.prefill_rank,
+                    decode_rank=p.decode_rank,
+                    start_head_idx=p.start_head_idx,
+                    end_head_idx=p.end_head_idx,
+                    is_quantized=True,
+                    shape=list(fp8_data.quantized_data.shape),
+                    dtype=dtype_str,
+                    scale_shape=list(fp8_data.scale_factors.shape),
+                    scale_dtype="float32",
+                    original_shape=list(fp8_data.original_shape),
+                    original_dtype="float16",
+                    block_size_tokens=fp8_data.block_size_tokens,
+                    body_bytes=len(body_fp8),
+                )
+            else:
+                body_fp8 = p.data.to(torch.float16).cpu().numpy().tobytes()
+                meta_fp8 = FrameMetadata(
+                    request_id="fp8_eval_req",
+                    kv_type="key",
+                    layer_idx=l,
+                    prefill_rank=p.prefill_rank,
+                    decode_rank=p.decode_rank,
+                    start_head_idx=p.start_head_idx,
+                    end_head_idx=p.end_head_idx,
+                    is_quantized=False,
+                    shape=list(p.data.shape),
+                    dtype="float16",
+                    body_bytes=len(body_fp8),
+                )
+            send_frame(sink_fp8, meta_fp8, body_fp8)
+
+            # Counterpart uncompressed FP16 frame
+            shard_k = slice_kv_for_prefill_rank(k_hetero, prefill_rank=p.prefill_rank, plan=plan)
+            rank_start_head = plan.prefill_head_slices[p.prefill_rank].start_head_idx
+            rel_start = p.start_head_idx - rank_start_head
+            rel_end = p.end_head_idx - rank_start_head
+            sub_slice_k_fp16 = shard_k[..., rel_start:rel_end, :].to(torch.float16).contiguous()
+            body_fp16 = sub_slice_k_fp16.cpu().numpy().tobytes()
+            meta_fp16 = FrameMetadata(
+                request_id="fp8_eval_req",
+                kv_type="key",
+                layer_idx=l,
+                prefill_rank=p.prefill_rank,
+                decode_rank=p.decode_rank,
+                start_head_idx=p.start_head_idx,
+                end_head_idx=p.end_head_idx,
+                is_quantized=False,
+                shape=list(sub_slice_k_fp16.shape),
+                dtype="float16",
+                body_bytes=len(body_fp16),
+            )
+            send_frame(sink_fp16, meta_fp16, body_fp16)
+
         rec_k = reassemble_decode_kv(
             payloads_k, decode_rank=0, plan=plan, expected_request_id="fp8_eval_req", expected_kv_type="key"
         )
@@ -220,6 +342,70 @@ def evaluate_passage_fp8_quality(
             payloads_v.extend(p_list)
         for p in payloads_v:
             total_wire_bytes += p.payload_bytes
+
+            # Count exact wire bytes using actual FrameMetadata serializer
+            if enable_fp8:
+                fp8_data = p.data
+                dtype_str = "float8_e4m3fn" if fp8_data.quantized_data.dtype == getattr(torch, "float8_e4m3fn", None) else "int8"
+                quant_bytes = fp8_data.quantized_data.view(torch.uint8).cpu().numpy().tobytes()
+                scale_bytes = fp8_data.scale_factors.cpu().numpy().tobytes()
+                body_fp8 = quant_bytes + scale_bytes
+                meta_fp8 = FrameMetadata(
+                    request_id="fp8_eval_req",
+                    kv_type="value",
+                    layer_idx=l,
+                    prefill_rank=p.prefill_rank,
+                    decode_rank=p.decode_rank,
+                    start_head_idx=p.start_head_idx,
+                    end_head_idx=p.end_head_idx,
+                    is_quantized=True,
+                    shape=list(fp8_data.quantized_data.shape),
+                    dtype=dtype_str,
+                    scale_shape=list(fp8_data.scale_factors.shape),
+                    scale_dtype="float32",
+                    original_shape=list(fp8_data.original_shape),
+                    original_dtype="float16",
+                    block_size_tokens=fp8_data.block_size_tokens,
+                    body_bytes=len(body_fp8),
+                )
+            else:
+                body_fp8 = p.data.to(torch.float16).cpu().numpy().tobytes()
+                meta_fp8 = FrameMetadata(
+                    request_id="fp8_eval_req",
+                    kv_type="value",
+                    layer_idx=l,
+                    prefill_rank=p.prefill_rank,
+                    decode_rank=p.decode_rank,
+                    start_head_idx=p.start_head_idx,
+                    end_head_idx=p.end_head_idx,
+                    is_quantized=False,
+                    shape=list(p.data.shape),
+                    dtype="float16",
+                    body_bytes=len(body_fp8),
+                )
+            send_frame(sink_fp8, meta_fp8, body_fp8)
+
+            # Counterpart uncompressed FP16 frame
+            shard_v = slice_kv_for_prefill_rank(v_hetero, prefill_rank=p.prefill_rank, plan=plan)
+            rank_start_head = plan.prefill_head_slices[p.prefill_rank].start_head_idx
+            rel_start = p.start_head_idx - rank_start_head
+            rel_end = p.end_head_idx - rank_start_head
+            sub_slice_v_fp16 = shard_v[..., rel_start:rel_end, :].to(torch.float16).contiguous()
+            body_fp16 = sub_slice_v_fp16.cpu().numpy().tobytes()
+            meta_fp16 = FrameMetadata(
+                request_id="fp8_eval_req",
+                kv_type="value",
+                layer_idx=l,
+                prefill_rank=p.prefill_rank,
+                decode_rank=p.decode_rank,
+                start_head_idx=p.start_head_idx,
+                end_head_idx=p.end_head_idx,
+                is_quantized=False,
+                shape=list(sub_slice_v_fp16.shape),
+                dtype="float16",
+                body_bytes=len(body_fp16),
+            )
+            send_frame(sink_fp16, meta_fp16, body_fp16)
 
         rec_v = reassemble_decode_kv(
             payloads_v, decode_rank=0, plan=plan, expected_request_id="fp8_eval_req", expected_kv_type="value"
@@ -313,12 +499,16 @@ def evaluate_passage_fp8_quality(
     comp_ratio_fp16 = total_uncompressed_fp16_bytes / max(1, total_wire_bytes)
     tensor_body_reduction_fp16_pct = (1.0 - (total_wire_bytes / max(1, total_uncompressed_fp16_bytes))) * 100.0
 
-    # Framing-inclusive wire calculation (frames + manifest overhead)
+    exact_wire_fp16_bytes = sink_fp16.bytes_sent
+    exact_wire_fp8_bytes = sink_fp8.bytes_sent
+    exact_wire_reduction_fp16_pct = (1.0 - (exact_wire_fp8_bytes / max(1, exact_wire_fp16_bytes))) * 100.0
+
+    # Static framing heuristic (frames * 150 + 800 bytes) retained for comparison as estimated macro-average
     num_frames = num_layers * 2 * prefill_tp
     framing_and_metadata_bytes = num_frames * 150 + 800
     full_wire_uncompressed_fp16 = total_uncompressed_fp16_bytes + framing_and_metadata_bytes
     full_wire_compressed_fp8 = total_wire_bytes + framing_and_metadata_bytes
-    total_wire_reduction_fp16_pct = (1.0 - (full_wire_compressed_fp8 / max(1, full_wire_uncompressed_fp16))) * 100.0
+    estimated_macro_wire_reduction_fp16_pct = (1.0 - (full_wire_compressed_fp8 / max(1, full_wire_uncompressed_fp16))) * 100.0
 
     return {
         "context_length": prompt_len,
@@ -329,13 +519,18 @@ def evaluate_passage_fp8_quality(
             "uncompressed_fp16_bytes": total_uncompressed_fp16_bytes,
             "tensor_body_bytes_fp8": total_wire_bytes,
             "wire_payload_bytes": total_wire_bytes,
+            "exact_wire_bytes_fp16": exact_wire_fp16_bytes,
+            "exact_wire_bytes_fp8": exact_wire_fp8_bytes,
             "ratio_vs_fp32": round(comp_ratio_fp32, 2),
             "ratio_vs_fp16": round(comp_ratio_fp16, 2),
             "tensor_body_reduction_vs_fp16_pct": round(tensor_body_reduction_fp16_pct, 1),
+            "exact_wire_reduction_vs_fp16_pct": round(exact_wire_reduction_fp16_pct, 1),
+            "estimated_macro_average_wire_reduction_vs_fp16_pct": round(estimated_macro_wire_reduction_fp16_pct, 1),
+            "total_wire_reduction_vs_fp16_pct": round(exact_wire_reduction_fp16_pct, 1),
             "wire_reduction_vs_fp16_pct": round(tensor_body_reduction_fp16_pct, 1),
-            "total_wire_reduction_vs_fp16_pct": round(total_wire_reduction_fp16_pct, 1),
             "estimated_full_wire_fp16_bytes": full_wire_uncompressed_fp16,
             "estimated_full_wire_fp8_bytes": full_wire_compressed_fp8,
+            "framing_accounting_method": "measured_actual_serializers",
         },
         "boundary_step": {
             "target_token": int(target_tokens[0]),
@@ -444,7 +639,8 @@ def run_full_fp8_quality_benchmark(
     avg_comp_fp32 = sum(p["compression"]["ratio_vs_fp32"] for p in passage_results) / n
     avg_comp_fp16 = sum(p["compression"]["ratio_vs_fp16"] for p in passage_results) / n
     avg_tensor_reduction_fp16 = sum(p["compression"]["tensor_body_reduction_vs_fp16_pct"] for p in passage_results) / n
-    avg_total_wire_reduction_fp16 = sum(p["compression"]["total_wire_reduction_vs_fp16_pct"] for p in passage_results) / n
+    avg_exact_wire_reduction_fp16 = sum(p["compression"]["exact_wire_reduction_vs_fp16_pct"] for p in passage_results) / n
+    avg_estimated_macro_reduction_fp16 = sum(p["compression"]["estimated_macro_average_wire_reduction_vs_fp16_pct"] for p in passage_results) / n
 
     # Check against criteria
     criteria_checks = {
@@ -516,8 +712,11 @@ def run_full_fp8_quality_benchmark(
                 "avg_ratio_vs_fp32": round(avg_comp_fp32, 2),
                 "avg_ratio_vs_fp16": round(avg_comp_fp16, 2),
                 "avg_tensor_body_reduction_vs_fp16_pct": round(avg_tensor_reduction_fp16, 1),
-                "avg_total_wire_reduction_vs_fp16_pct": round(avg_total_wire_reduction_fp16, 1),
+                "avg_exact_wire_reduction_vs_fp16_pct": round(avg_exact_wire_reduction_fp16, 1),
+                "avg_estimated_macro_average_wire_reduction_vs_fp16_pct": round(avg_estimated_macro_reduction_fp16, 1),
+                "avg_total_wire_reduction_vs_fp16_pct": round(avg_exact_wire_reduction_fp16, 1),
                 "avg_wire_reduction_vs_fp16_pct": round(avg_tensor_reduction_fp16, 1),
+                "framing_accounting_method": "measured_actual_serializers",
             },
         },
         "passages": passage_results,
@@ -618,8 +817,8 @@ def main(model: str, block_size: int, mode: str, output: Optional[str]):
         f"    Max Logit MAE:             [white]{s_worst['max_mean_absolute_logit_error']:.4f}[/white]\n\n"
         f"[bold]Wire & Tensor Compression Ratios (Explicit Denominators):[/bold]\n"
         f"  Relative to in-memory FP32 tensor cache:   [bold green]{s_comp['avg_ratio_vs_fp32']:.2f}x[/bold green]\n"
-        f"  Relative to unpadded FP16/BF16 tensor cache: [bold green]{s_comp['avg_ratio_vs_fp16']:.2f}x[/bold green] ({s_comp['avg_tensor_body_reduction_vs_fp16_pct']:.1f}% tensor-body reduction, excludes socket framing)\n"
-        f"  Total wire savings (including socket framing & JSON headers): [bold green]{s_comp['avg_total_wire_reduction_vs_fp16_pct']:.1f}% net wire reduction[/bold green]\n\n"
+        f"  Measured net wire savings (actual serializer headers & framing): [bold green]{s_comp['avg_exact_wire_reduction_vs_fp16_pct']:.1f}% net wire reduction[/bold green]\n"
+        f"  Estimated macro-average wire savings (static framing heuristic): [dim]{s_comp['avg_estimated_macro_average_wire_reduction_vs_fp16_pct']:.1f}% estimated[/dim]\n\n"
         f"[bold]Acceptance Status:[/bold] {'[bold green]ALL CRITERIA PASSED[/bold green]' if all_passed else '[bold red]FAILED THRESHOLDS[/bold red]'}\n"
     )
 
