@@ -5,968 +5,1385 @@
     "head_dim": 64,
     "prefill_tp": 2,
     "decode_tp": 1,
-    "block_size_tokens": 16
+    "block_size_tokens": 16,
+    "baseline_dtype": "float16"
   },
   "points": [
     {
       "bandwidth": "1 Gbps",
       "bandwidth_bytes_per_sec": 125000000.0,
       "seq_len": 8,
-      "uncompressed": {
-        "p50_ms": 3.489493991523832,
-        "p90_ms": 11.985159030459672,
-        "p99_ms": 11.985159030459672,
-        "codec_latency_ms": 1.643333991523832,
-        "total_wire_bytes": 230770
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 7.612,
+          "p90": 17.882,
+          "p99": 17.882
+        },
+        "projected_link_e2e_ms": {
+          "p50": 2.807,
+          "p90": 11.479,
+          "p99": 11.479
+        },
+        "codec_latency_ms": 1.747,
+        "wire_transit_projected_ms": 1.06,
+        "total_wire_bytes": 132466
       },
-      "fp8": {
-        "p50_ms": 7.37747299146536,
-        "p90_ms": 16.33426499913144,
-        "p99_ms": 16.33426499913144,
-        "codec_latency_ms": 6.30162499146536,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 14.87,
+          "p90": 23.549,
+          "p99": 23.549
+        },
+        "projected_link_e2e_ms": {
+          "p50": 8.718,
+          "p90": 17.632,
+          "p99": 17.632
+        },
+        "codec_latency_ms": 7.643,
+        "wire_transit_projected_ms": 1.076,
         "total_wire_bytes": 134481
       },
+      "wire_compression_ratio": 0.99,
+      "projected_speedup_fp8_vs_fp16": 0.32,
+      "measured_loopback_speedup": 0.51,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 3.489493991523832,
-        "p90_ms": 11.985159030459672,
-        "p99_ms": 11.985159030459672,
-        "codec_latency_ms": 1.643333991523832,
-        "total_wire_bytes": 230770
-      },
-      "compression_ratio": 1.72,
-      "speedup_fp8_vs_uncompressed": 0.47,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "1 Gbps",
       "bandwidth_bytes_per_sec": 125000000.0,
       "seq_len": 16,
-      "uncompressed": {
-        "p50_ms": 5.055283962884367,
-        "p90_ms": 5.152408974846274,
-        "p99_ms": 5.152408974846274,
-        "codec_latency_ms": 1.6352919628843665,
-        "total_wire_bytes": 427499
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 8.105,
+          "p90": 8.4,
+          "p99": 8.4
+        },
+        "projected_link_e2e_ms": {
+          "p50": 3.69,
+          "p90": 3.695,
+          "p99": 3.695
+        },
+        "codec_latency_ms": 1.843,
+        "wire_transit_projected_ms": 1.847,
+        "total_wire_bytes": 230891
       },
-      "fp8": {
-        "p50_ms": 6.168816006698071,
-        "p90_ms": 6.409566035449862,
-        "p99_ms": 6.409566035449862,
-        "codec_latency_ms": 5.092000006698072,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 13.129,
+          "p90": 14.144,
+          "p99": 14.144
+        },
+        "projected_link_e2e_ms": {
+          "p50": 7.364,
+          "p90": 7.366,
+          "p99": 7.366
+        },
+        "codec_latency_ms": 6.287,
+        "wire_transit_projected_ms": 1.077,
         "total_wire_bytes": 134602
       },
-      "policy_selection": "block_fp8",
-      "policy_result": {
-        "p50_ms": 6.168816006698071,
-        "p90_ms": 6.409566035449862,
-        "p99_ms": 6.409566035449862,
-        "codec_latency_ms": 5.092000006698072,
-        "total_wire_bytes": 134602
-      },
-      "compression_ratio": 3.18,
-      "speedup_fp8_vs_uncompressed": 0.82,
-      "fp8_helps": false
+      "wire_compression_ratio": 1.72,
+      "projected_speedup_fp8_vs_fp16": 0.5,
+      "measured_loopback_speedup": 0.62,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
+      "policy_selection": "uncompressed_fp16",
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "1 Gbps",
       "bandwidth_bytes_per_sec": 125000000.0,
       "seq_len": 32,
-      "uncompressed": {
-        "p50_ms": 8.43855306149766,
-        "p90_ms": 8.517553022758365,
-        "p99_ms": 8.517553022758365,
-        "codec_latency_ms": 1.8728330614976585,
-        "total_wire_bytes": 820715
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 7.842,
+          "p90": 8.441,
+          "p99": 8.441
+        },
+        "projected_link_e2e_ms": {
+          "p50": 5.391,
+          "p90": 5.402,
+          "p99": 5.402
+        },
+        "codec_latency_ms": 1.971,
+        "wire_transit_projected_ms": 3.42,
+        "total_wire_bytes": 427499
       },
-      "fp8": {
-        "p50_ms": 7.822486947726161,
-        "p90_ms": 8.171486985839607,
-        "p99_ms": 8.171486985839607,
-        "codec_latency_ms": 5.95616694772616,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 15.506,
+          "p90": 16.035,
+          "p99": 16.035
+        },
+        "projected_link_e2e_ms": {
+          "p50": 9.305,
+          "p90": 9.734,
+          "p99": 9.734
+        },
+        "codec_latency_ms": 7.439,
+        "wire_transit_projected_ms": 1.866,
         "total_wire_bytes": 233290
       },
-      "policy_selection": "block_fp8",
-      "policy_result": {
-        "p50_ms": 7.822486947726161,
-        "p90_ms": 8.171486985839607,
-        "p99_ms": 8.171486985839607,
-        "codec_latency_ms": 5.95616694772616,
-        "total_wire_bytes": 233290
-      },
-      "compression_ratio": 3.52,
-      "speedup_fp8_vs_uncompressed": 1.08,
-      "fp8_helps": true
+      "wire_compression_ratio": 1.83,
+      "projected_speedup_fp8_vs_fp16": 0.58,
+      "measured_loopback_speedup": 0.51,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
+      "policy_selection": "uncompressed_fp16",
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "1 Gbps",
       "bandwidth_bytes_per_sec": 125000000.0,
       "seq_len": 64,
-      "uncompressed": {
-        "p50_ms": 15.08377800318399,
-        "p90_ms": 15.127193991513789,
-        "p99_ms": 15.127193991513789,
-        "codec_latency_ms": 2.2258340031839907,
-        "total_wire_bytes": 1607243
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 8.478,
+          "p90": 8.994,
+          "p99": 8.994
+        },
+        "projected_link_e2e_ms": {
+          "p50": 8.709,
+          "p90": 8.831,
+          "p99": 8.831
+        },
+        "codec_latency_ms": 2.143,
+        "wire_transit_projected_ms": 6.566,
+        "total_wire_bytes": 820715
       },
-      "fp8": {
-        "p50_ms": 10.078743992837401,
-        "p90_ms": 10.22511897235948,
-        "p99_ms": 10.22511897235948,
-        "codec_latency_ms": 6.633415992837399,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 14.737,
+          "p90": 14.789,
+          "p99": 14.789
+        },
+        "projected_link_e2e_ms": {
+          "p50": 10.994,
+          "p90": 11.036,
+          "p99": 11.036
+        },
+        "codec_latency_ms": 7.549,
+        "wire_transit_projected_ms": 3.445,
         "total_wire_bytes": 430666
       },
-      "policy_selection": "block_fp8",
-      "policy_result": {
-        "p50_ms": 10.078743992837401,
-        "p90_ms": 10.22511897235948,
-        "p99_ms": 10.22511897235948,
-        "codec_latency_ms": 6.633415992837399,
-        "total_wire_bytes": 430666
-      },
-      "compression_ratio": 3.73,
-      "speedup_fp8_vs_uncompressed": 1.5,
-      "fp8_helps": true
+      "wire_compression_ratio": 1.91,
+      "projected_speedup_fp8_vs_fp16": 0.79,
+      "measured_loopback_speedup": 0.58,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
+      "policy_selection": "uncompressed_fp16",
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "1 Gbps",
       "bandwidth_bytes_per_sec": 125000000.0,
       "seq_len": 128,
-      "uncompressed": {
-        "p50_ms": 28.140632004213302,
-        "p90_ms": 28.147548995182632,
-        "p99_ms": 28.147548995182632,
-        "codec_latency_ms": 2.6990000042133033,
-        "total_wire_bytes": 3180204
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 9.098,
+          "p90": 9.613,
+          "p99": 9.613
+        },
+        "projected_link_e2e_ms": {
+          "p50": 14.999,
+          "p90": 15.331,
+          "p99": 15.331
+        },
+        "codec_latency_ms": 2.14,
+        "wire_transit_projected_ms": 12.859,
+        "total_wire_bytes": 1607340
       },
-      "fp8": {
-        "p50_ms": 14.27532806267485,
-        "p90_ms": 14.314121082159579,
-        "p99_ms": 14.314121082159579,
-        "codec_latency_ms": 7.67120806267485,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 16.72,
+          "p90": 16.821,
+          "p99": 16.821
+        },
+        "projected_link_e2e_ms": {
+          "p50": 15.171,
+          "p90": 15.283,
+          "p99": 15.283
+        },
+        "codec_latency_ms": 8.567,
+        "wire_transit_projected_ms": 6.604,
         "total_wire_bytes": 825515
       },
+      "wire_compression_ratio": 1.95,
+      "projected_speedup_fp8_vs_fp16": 0.99,
+      "measured_loopback_speedup": 0.54,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "block_fp8",
-      "policy_result": {
-        "p50_ms": 14.27532806267485,
-        "p90_ms": 14.314121082159579,
-        "p99_ms": 14.314121082159579,
-        "codec_latency_ms": 7.67120806267485,
-        "total_wire_bytes": 825515
-      },
-      "compression_ratio": 3.85,
-      "speedup_fp8_vs_uncompressed": 1.97,
-      "fp8_helps": true
+      "policy_matches_empirical": false,
+      "policy_regret_pct": 1.147
     },
     {
       "bandwidth": "1 Gbps",
       "bandwidth_bytes_per_sec": 125000000.0,
       "seq_len": 256,
-      "uncompressed": {
-        "p50_ms": 54.72654004203132,
-        "p90_ms": 54.781913979388534,
-        "p99_ms": 54.781913979388534,
-        "codec_latency_ms": 4.119084042031318,
-        "total_wire_bytes": 6325932
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 11.657,
+          "p90": 13.249,
+          "p99": 13.249
+        },
+        "projected_link_e2e_ms": {
+          "p50": 28.616,
+          "p90": 28.839,
+          "p99": 28.839
+        },
+        "codec_latency_ms": 3.175,
+        "wire_transit_projected_ms": 25.442,
+        "total_wire_bytes": 3180204
       },
-      "fp8": {
-        "p50_ms": 23.41166404169029,
-        "p90_ms": 23.503414041828126,
-        "p99_ms": 23.503414041828126,
-        "codec_latency_ms": 10.48920804169029,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 21.194,
+          "p90": 22.239,
+          "p99": 22.239
+        },
+        "projected_link_e2e_ms": {
+          "p50": 24.945,
+          "p90": 25.749,
+          "p99": 25.749
+        },
+        "codec_latency_ms": 12.022,
+        "wire_transit_projected_ms": 12.922,
         "total_wire_bytes": 1615307
       },
+      "wire_compression_ratio": 1.97,
+      "projected_speedup_fp8_vs_fp16": 1.15,
+      "measured_loopback_speedup": 0.55,
+      "fp8_helps": true,
+      "empirical_winner": "block_fp8",
       "policy_selection": "block_fp8",
-      "policy_result": {
-        "p50_ms": 23.41166404169029,
-        "p90_ms": 23.503414041828126,
-        "p99_ms": 23.503414041828126,
-        "codec_latency_ms": 10.48920804169029,
-        "total_wire_bytes": 1615307
-      },
-      "compression_ratio": 3.92,
-      "speedup_fp8_vs_uncompressed": 2.34,
-      "fp8_helps": true
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "1 Gbps",
       "bandwidth_bytes_per_sec": 125000000.0,
       "seq_len": 512,
-      "uncompressed": {
-        "p50_ms": 109.43853898263212,
-        "p90_ms": 110.75078902124103,
-        "p99_ms": 110.75078902124103,
-        "codec_latency_ms": 8.49866698263213,
-        "total_wire_bytes": 12617484
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 18.086,
+          "p90": 18.419,
+          "p99": 18.419
+        },
+        "projected_link_e2e_ms": {
+          "p50": 57.598,
+          "p90": 57.86,
+          "p99": 57.86
+        },
+        "codec_latency_ms": 6.991,
+        "wire_transit_projected_ms": 50.607,
+        "total_wire_bytes": 6325932
       },
-      "fp8": {
-        "p50_ms": 49.70156096736386,
-        "p90_ms": 50.75318701913997,
-        "p99_ms": 50.75318701913997,
-        "codec_latency_ms": 24.147040967363864,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 42.669,
+          "p90": 42.784,
+          "p99": 42.784
+        },
+        "projected_link_e2e_ms": {
+          "p50": 53.072,
+          "p90": 57.727,
+          "p99": 57.727
+        },
+        "codec_latency_ms": 27.517,
+        "wire_transit_projected_ms": 25.555,
         "total_wire_bytes": 3194315
       },
+      "wire_compression_ratio": 1.98,
+      "projected_speedup_fp8_vs_fp16": 1.09,
+      "measured_loopback_speedup": 0.42,
+      "fp8_helps": true,
+      "empirical_winner": "block_fp8",
       "policy_selection": "block_fp8",
-      "policy_result": {
-        "p50_ms": 49.70156096736386,
-        "p90_ms": 50.75318701913997,
-        "p99_ms": 50.75318701913997,
-        "codec_latency_ms": 24.147040967363864,
-        "total_wire_bytes": 3194315
-      },
-      "compression_ratio": 3.95,
-      "speedup_fp8_vs_uncompressed": 2.2,
-      "fp8_helps": true
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "1 Gbps",
       "bandwidth_bytes_per_sec": 125000000.0,
       "seq_len": 1024,
-      "uncompressed": {
-        "p50_ms": 218.53681897619168,
-        "p90_ms": 220.72369400984968,
-        "p99_ms": 220.72369400984968,
-        "codec_latency_ms": 16.93287497619167,
-        "total_wire_bytes": 25200493
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 27.183,
+          "p90": 28.017,
+          "p99": 28.017
+        },
+        "projected_link_e2e_ms": {
+          "p50": 115.642,
+          "p90": 116.605,
+          "p99": 116.605
+        },
+        "codec_latency_ms": 14.701,
+        "wire_transit_projected_ms": 100.941,
+        "total_wire_bytes": 12617581
       },
-      "fp8": {
-        "p50_ms": 104.25279896742606,
-        "p90_ms": 108.96392296570295,
-        "p99_ms": 108.96392296570295,
-        "codec_latency_ms": 53.43337496742606,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 75.866,
+          "p90": 83.355,
+          "p99": 83.355
+        },
+        "projected_link_e2e_ms": {
+          "p50": 116.122,
+          "p90": 121.919,
+          "p99": 121.919
+        },
+        "codec_latency_ms": 65.303,
+        "wire_transit_projected_ms": 50.819,
         "total_wire_bytes": 6352428
       },
+      "wire_compression_ratio": 1.99,
+      "projected_speedup_fp8_vs_fp16": 1.0,
+      "measured_loopback_speedup": 0.36,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "block_fp8",
-      "policy_result": {
-        "p50_ms": 104.25279896742606,
-        "p90_ms": 108.96392296570295,
-        "p99_ms": 108.96392296570295,
-        "codec_latency_ms": 53.43337496742606,
-        "total_wire_bytes": 6352428
-      },
-      "compression_ratio": 3.97,
-      "speedup_fp8_vs_uncompressed": 2.1,
-      "fp8_helps": true
+      "policy_matches_empirical": false,
+      "policy_regret_pct": 0.415
     },
     {
       "bandwidth": "10 Gbps",
       "bandwidth_bytes_per_sec": 1250000000.0,
       "seq_len": 8,
-      "uncompressed": {
-        "p50_ms": 1.7221160075437127,
-        "p90_ms": 1.7904489492807387,
-        "p99_ms": 1.7904489492807387,
-        "codec_latency_ms": 1.5375000075437129,
-        "total_wire_bytes": 230770
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 7.891,
+          "p90": 7.964,
+          "p99": 7.964
+        },
+        "projected_link_e2e_ms": {
+          "p50": 1.885,
+          "p90": 2.21,
+          "p99": 2.21
+        },
+        "codec_latency_ms": 1.779,
+        "wire_transit_projected_ms": 0.106,
+        "total_wire_bytes": 132466
       },
-      "fp8": {
-        "p50_ms": 6.167460744629311,
-        "p90_ms": 6.284376768755424,
-        "p99_ms": 6.284376768755424,
-        "codec_latency_ms": 6.059875944629312,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 15.063,
+          "p90": 15.096,
+          "p99": 15.096
+        },
+        "projected_link_e2e_ms": {
+          "p50": 7.379,
+          "p90": 7.643,
+          "p99": 7.643
+        },
+        "codec_latency_ms": 7.272,
+        "wire_transit_projected_ms": 0.108,
         "total_wire_bytes": 134481
       },
+      "wire_compression_ratio": 0.99,
+      "projected_speedup_fp8_vs_fp16": 0.26,
+      "measured_loopback_speedup": 0.52,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 1.7221160075437127,
-        "p90_ms": 1.7904489492807387,
-        "p99_ms": 1.7904489492807387,
-        "codec_latency_ms": 1.5375000075437129,
-        "total_wire_bytes": 230770
-      },
-      "compression_ratio": 1.72,
-      "speedup_fp8_vs_uncompressed": 0.28,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "10 Gbps",
       "bandwidth_bytes_per_sec": 1250000000.0,
       "seq_len": 16,
-      "uncompressed": {
-        "p50_ms": 1.9068742122636557,
-        "p90_ms": 2.134666167958212,
-        "p99_ms": 2.134666167958212,
-        "codec_latency_ms": 1.5648750122636557,
-        "total_wire_bytes": 427499
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 7.805,
+          "p90": 7.95,
+          "p99": 7.95
+        },
+        "projected_link_e2e_ms": {
+          "p50": 2.025,
+          "p90": 2.065,
+          "p99": 2.065
+        },
+        "codec_latency_ms": 1.841,
+        "wire_transit_projected_ms": 0.185,
+        "total_wire_bytes": 230891
       },
-      "fp8": {
-        "p50_ms": 5.328139627906715,
-        "p90_ms": 5.342682579155301,
-        "p99_ms": 5.342682579155301,
-        "codec_latency_ms": 5.220458027906716,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 13.12,
+          "p90": 13.394,
+          "p99": 13.394
+        },
+        "projected_link_e2e_ms": {
+          "p50": 6.14,
+          "p90": 6.414,
+          "p99": 6.414
+        },
+        "codec_latency_ms": 6.033,
+        "wire_transit_projected_ms": 0.108,
         "total_wire_bytes": 134602
       },
+      "wire_compression_ratio": 1.72,
+      "projected_speedup_fp8_vs_fp16": 0.33,
+      "measured_loopback_speedup": 0.59,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 1.9068742122636557,
-        "p90_ms": 2.134666167958212,
-        "p99_ms": 2.134666167958212,
-        "codec_latency_ms": 1.5648750122636557,
-        "total_wire_bytes": 427499
-      },
-      "compression_ratio": 3.18,
-      "speedup_fp8_vs_uncompressed": 0.36,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "10 Gbps",
       "bandwidth_bytes_per_sec": 1250000000.0,
       "seq_len": 32,
-      "uncompressed": {
-        "p50_ms": 2.348988029982269,
-        "p90_ms": 2.3708629928224982,
-        "p99_ms": 2.3708629928224982,
-        "codec_latency_ms": 1.6924160299822688,
-        "total_wire_bytes": 820715
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 7.572,
+          "p90": 7.634,
+          "p99": 7.634
+        },
+        "projected_link_e2e_ms": {
+          "p50": 2.109,
+          "p90": 2.129,
+          "p99": 2.129
+        },
+        "codec_latency_ms": 1.767,
+        "wire_transit_projected_ms": 0.342,
+        "total_wire_bytes": 427499
       },
-      "fp8": {
-        "p50_ms": 6.28738206261468,
-        "p90_ms": 6.316256031018466,
-        "p99_ms": 6.316256031018466,
-        "codec_latency_ms": 6.100750062614679,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 14.209,
+          "p90": 14.252,
+          "p99": 14.252
+        },
+        "projected_link_e2e_ms": {
+          "p50": 7.185,
+          "p90": 7.428,
+          "p99": 7.428
+        },
+        "codec_latency_ms": 6.998,
+        "wire_transit_projected_ms": 0.187,
         "total_wire_bytes": 233290
       },
+      "wire_compression_ratio": 1.83,
+      "projected_speedup_fp8_vs_fp16": 0.29,
+      "measured_loopback_speedup": 0.53,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 2.348988029982269,
-        "p90_ms": 2.3708629928224982,
-        "p99_ms": 2.3708629928224982,
-        "codec_latency_ms": 1.6924160299822688,
-        "total_wire_bytes": 820715
-      },
-      "compression_ratio": 3.52,
-      "speedup_fp8_vs_uncompressed": 0.37,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "10 Gbps",
       "bandwidth_bytes_per_sec": 1250000000.0,
       "seq_len": 64,
-      "uncompressed": {
-        "p50_ms": 3.3580854412587224,
-        "p90_ms": 3.43125241281929,
-        "p99_ms": 3.43125241281929,
-        "codec_latency_ms": 2.0722910412587225,
-        "total_wire_bytes": 1607243
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 8.068,
+          "p90": 8.34,
+          "p99": 8.34
+        },
+        "projected_link_e2e_ms": {
+          "p50": 2.586,
+          "p90": 2.648,
+          "p99": 2.648
+        },
+        "codec_latency_ms": 1.93,
+        "wire_transit_projected_ms": 0.657,
+        "total_wire_bytes": 820715
       },
-      "fp8": {
-        "p50_ms": 6.560531819332231,
-        "p90_ms": 6.8264918188562875,
-        "p99_ms": 6.8264918188562875,
-        "codec_latency_ms": 6.21599901933223,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 14.388,
+          "p90": 14.761,
+          "p99": 14.761
+        },
+        "projected_link_e2e_ms": {
+          "p50": 7.711,
+          "p90": 7.981,
+          "p99": 7.981
+        },
+        "codec_latency_ms": 7.366,
+        "wire_transit_projected_ms": 0.345,
         "total_wire_bytes": 430666
       },
+      "wire_compression_ratio": 1.91,
+      "projected_speedup_fp8_vs_fp16": 0.34,
+      "measured_loopback_speedup": 0.56,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 3.3580854412587224,
-        "p90_ms": 3.43125241281929,
-        "p99_ms": 3.43125241281929,
-        "codec_latency_ms": 2.0722910412587225,
-        "total_wire_bytes": 1607243
-      },
-      "compression_ratio": 3.73,
-      "speedup_fp8_vs_uncompressed": 0.51,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "10 Gbps",
       "bandwidth_bytes_per_sec": 1250000000.0,
       "seq_len": 128,
-      "uncompressed": {
-        "p50_ms": 5.028455224746537,
-        "p90_ms": 5.201914170683992,
-        "p99_ms": 5.201914170683992,
-        "codec_latency_ms": 2.484292024746537,
-        "total_wire_bytes": 3180204
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 8.967,
+          "p90": 9.897,
+          "p99": 9.897
+        },
+        "projected_link_e2e_ms": {
+          "p50": 3.587,
+          "p90": 3.834,
+          "p99": 3.834
+        },
+        "codec_latency_ms": 2.301,
+        "wire_transit_projected_ms": 1.286,
+        "total_wire_bytes": 1607340
       },
-      "fp8": {
-        "p50_ms": 8.070370983771502,
-        "p90_ms": 8.204495055108785,
-        "p99_ms": 8.204495055108785,
-        "codec_latency_ms": 7.409958983771503,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 15.987,
+          "p90": 16.003,
+          "p99": 16.003
+        },
+        "projected_link_e2e_ms": {
+          "p50": 9.293,
+          "p90": 9.348,
+          "p99": 9.348
+        },
+        "codec_latency_ms": 8.633,
+        "wire_transit_projected_ms": 0.66,
         "total_wire_bytes": 825515
       },
+      "wire_compression_ratio": 1.95,
+      "projected_speedup_fp8_vs_fp16": 0.39,
+      "measured_loopback_speedup": 0.56,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 5.028455224746537,
-        "p90_ms": 5.201914170683992,
-        "p99_ms": 5.201914170683992,
-        "codec_latency_ms": 2.484292024746537,
-        "total_wire_bytes": 3180204
-      },
-      "compression_ratio": 3.85,
-      "speedup_fp8_vs_uncompressed": 0.62,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "10 Gbps",
       "bandwidth_bytes_per_sec": 1250000000.0,
       "seq_len": 256,
-      "uncompressed": {
-        "p50_ms": 8.96616160063443,
-        "p90_ms": 8.9942455746643,
-        "p99_ms": 8.9942455746643,
-        "codec_latency_ms": 3.905416000634432,
-        "total_wire_bytes": 6325932
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 11.352,
+          "p90": 11.507,
+          "p99": 11.507
+        },
+        "projected_link_e2e_ms": {
+          "p50": 5.454,
+          "p90": 5.585,
+          "p99": 5.585
+        },
+        "codec_latency_ms": 2.91,
+        "wire_transit_projected_ms": 2.544,
+        "total_wire_bytes": 3180204
       },
-      "fp8": {
-        "p50_ms": 11.732911595702149,
-        "p90_ms": 12.300870635174192,
-        "p99_ms": 12.300870635174192,
-        "codec_latency_ms": 10.440665995702147,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 21.243,
+          "p90": 22.99,
+          "p99": 22.99
+        },
+        "projected_link_e2e_ms": {
+          "p50": 14.356,
+          "p90": 16.395,
+          "p99": 16.395
+        },
+        "codec_latency_ms": 13.064,
+        "wire_transit_projected_ms": 1.292,
         "total_wire_bytes": 1615307
       },
+      "wire_compression_ratio": 1.97,
+      "projected_speedup_fp8_vs_fp16": 0.38,
+      "measured_loopback_speedup": 0.53,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 8.96616160063443,
-        "p90_ms": 8.9942455746643,
-        "p99_ms": 8.9942455746643,
-        "codec_latency_ms": 3.905416000634432,
-        "total_wire_bytes": 6325932
-      },
-      "compression_ratio": 3.92,
-      "speedup_fp8_vs_uncompressed": 0.76,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "10 Gbps",
       "bandwidth_bytes_per_sec": 1250000000.0,
       "seq_len": 512,
-      "uncompressed": {
-        "p50_ms": 18.266444189996136,
-        "p90_ms": 18.320487267394228,
-        "p99_ms": 18.320487267394228,
-        "codec_latency_ms": 8.172456989996135,
-        "total_wire_bytes": 12617484
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 18.705,
+          "p90": 23.627,
+          "p99": 23.627
+        },
+        "projected_link_e2e_ms": {
+          "p50": 12.436,
+          "p90": 12.816,
+          "p99": 12.816
+        },
+        "codec_latency_ms": 7.376,
+        "wire_transit_projected_ms": 5.061,
+        "total_wire_bytes": 6325932
       },
-      "fp8": {
-        "p50_ms": 33.20995200576675,
-        "p90_ms": 44.10453600960267,
-        "p99_ms": 44.10453600960267,
-        "codec_latency_ms": 30.65450000576675,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 43.744,
+          "p90": 45.552,
+          "p99": 45.552
+        },
+        "projected_link_e2e_ms": {
+          "p50": 33.735,
+          "p90": 35.989,
+          "p99": 35.989
+        },
+        "codec_latency_ms": 31.18,
+        "wire_transit_projected_ms": 2.555,
         "total_wire_bytes": 3194315
       },
+      "wire_compression_ratio": 1.98,
+      "projected_speedup_fp8_vs_fp16": 0.37,
+      "measured_loopback_speedup": 0.43,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 18.266444189996136,
-        "p90_ms": 18.320487267394228,
-        "p99_ms": 18.320487267394228,
-        "codec_latency_ms": 8.172456989996135,
-        "total_wire_bytes": 12617484
-      },
-      "compression_ratio": 3.95,
-      "speedup_fp8_vs_uncompressed": 0.55,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "10 Gbps",
       "bandwidth_bytes_per_sec": 1250000000.0,
       "seq_len": 1024,
-      "uncompressed": {
-        "p50_ms": 37.09851941616776,
-        "p90_ms": 37.231351335640426,
-        "p99_ms": 37.231351335640426,
-        "codec_latency_ms": 16.93812501616776,
-        "total_wire_bytes": 25200493
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 22.391,
+          "p90": 23.971,
+          "p99": 23.971
+        },
+        "projected_link_e2e_ms": {
+          "p50": 22.671,
+          "p90": 23.336,
+          "p99": 23.336
+        },
+        "codec_latency_ms": 12.577,
+        "wire_transit_projected_ms": 10.094,
+        "total_wire_bytes": 12617581
       },
-      "fp8": {
-        "p50_ms": 58.49648334741493,
-        "p90_ms": 65.68831738740107,
-        "p99_ms": 65.68831738740107,
-        "codec_latency_ms": 53.414540947414935,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 65.904,
+          "p90": 85.604,
+          "p99": 85.604
+        },
+        "projected_link_e2e_ms": {
+          "p50": 60.823,
+          "p90": 78.058,
+          "p99": 78.058
+        },
+        "codec_latency_ms": 55.741,
+        "wire_transit_projected_ms": 5.082,
         "total_wire_bytes": 6352428
       },
+      "wire_compression_ratio": 1.99,
+      "projected_speedup_fp8_vs_fp16": 0.37,
+      "measured_loopback_speedup": 0.34,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 37.09851941616776,
-        "p90_ms": 37.231351335640426,
-        "p99_ms": 37.231351335640426,
-        "codec_latency_ms": 16.93812501616776,
-        "total_wire_bytes": 25200493
-      },
-      "compression_ratio": 3.97,
-      "speedup_fp8_vs_uncompressed": 0.63,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "25 Gbps",
       "bandwidth_bytes_per_sec": 3125000000.0,
       "seq_len": 8,
-      "uncompressed": {
-        "p50_ms": 1.6022213671652912,
-        "p90_ms": 1.6754714010579823,
-        "p99_ms": 1.6754714010579823,
-        "codec_latency_ms": 1.5283749671652913,
-        "total_wire_bytes": 230770
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 8.028,
+          "p90": 8.477,
+          "p99": 8.477
+        },
+        "projected_link_e2e_ms": {
+          "p50": 1.814,
+          "p90": 1.97,
+          "p99": 1.97
+        },
+        "codec_latency_ms": 1.772,
+        "wire_transit_projected_ms": 0.042,
+        "total_wire_bytes": 132466
       },
-      "fp8": {
-        "p50_ms": 6.011949858865393,
-        "p90_ms": 6.018533902014298,
-        "p99_ms": 6.018533902014298,
-        "codec_latency_ms": 5.968915938865393,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 14.545,
+          "p90": 14.742,
+          "p99": 14.742
+        },
+        "projected_link_e2e_ms": {
+          "p50": 7.272,
+          "p90": 7.285,
+          "p99": 7.285
+        },
+        "codec_latency_ms": 7.229,
+        "wire_transit_projected_ms": 0.043,
         "total_wire_bytes": 134481
       },
+      "wire_compression_ratio": 0.99,
+      "projected_speedup_fp8_vs_fp16": 0.25,
+      "measured_loopback_speedup": 0.55,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 1.6022213671652912,
-        "p90_ms": 1.6754714010579823,
-        "p99_ms": 1.6754714010579823,
-        "codec_latency_ms": 1.5283749671652913,
-        "total_wire_bytes": 230770
-      },
-      "compression_ratio": 1.72,
-      "speedup_fp8_vs_uncompressed": 0.27,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "25 Gbps",
       "bandwidth_bytes_per_sec": 3125000000.0,
       "seq_len": 16,
-      "uncompressed": {
-        "p50_ms": 1.6662576589042473,
-        "p90_ms": 1.7755506913418102,
-        "p99_ms": 1.7755506913418102,
-        "codec_latency_ms": 1.5294579789042473,
-        "total_wire_bytes": 427499
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 7.532,
+          "p90": 7.649,
+          "p99": 7.649
+        },
+        "projected_link_e2e_ms": {
+          "p50": 1.82,
+          "p90": 1.823,
+          "p99": 1.823
+        },
+        "codec_latency_ms": 1.746,
+        "wire_transit_projected_ms": 0.074,
+        "total_wire_bytes": 230891
       },
-      "fp8": {
-        "p50_ms": 4.845238658635035,
-        "p90_ms": 4.859030614642515,
-        "p99_ms": 4.859030614642515,
-        "codec_latency_ms": 4.802166018635035,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 13.403,
+          "p90": 13.689,
+          "p99": 13.689
+        },
+        "projected_link_e2e_ms": {
+          "p50": 5.901,
+          "p90": 6.096,
+          "p99": 6.096
+        },
+        "codec_latency_ms": 5.858,
+        "wire_transit_projected_ms": 0.043,
         "total_wire_bytes": 134602
       },
+      "wire_compression_ratio": 1.72,
+      "projected_speedup_fp8_vs_fp16": 0.31,
+      "measured_loopback_speedup": 0.56,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 1.6662576589042473,
-        "p90_ms": 1.7755506913418102,
-        "p99_ms": 1.7755506913418102,
-        "codec_latency_ms": 1.5294579789042473,
-        "total_wire_bytes": 427499
-      },
-      "compression_ratio": 3.18,
-      "speedup_fp8_vs_uncompressed": 0.34,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "25 Gbps",
       "bandwidth_bytes_per_sec": 3125000000.0,
       "seq_len": 32,
-      "uncompressed": {
-        "p50_ms": 1.8057117953402282,
-        "p90_ms": 1.9037958367233456,
-        "p99_ms": 1.9037958367233456,
-        "codec_latency_ms": 1.543082995340228,
-        "total_wire_bytes": 820715
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 7.621,
+          "p90": 7.875,
+          "p99": 7.875
+        },
+        "projected_link_e2e_ms": {
+          "p50": 1.957,
+          "p90": 1.992,
+          "p99": 1.992
+        },
+        "codec_latency_ms": 1.82,
+        "wire_transit_projected_ms": 0.137,
+        "total_wire_bytes": 427499
       },
-      "fp8": {
-        "p50_ms": 5.6447777511912465,
-        "p90_ms": 5.714444812516409,
-        "p99_ms": 5.714444812516409,
-        "codec_latency_ms": 5.5701249511912465,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 14.428,
+          "p90": 14.905,
+          "p99": 14.905
+        },
+        "projected_link_e2e_ms": {
+          "p50": 7.12,
+          "p90": 7.219,
+          "p99": 7.219
+        },
+        "codec_latency_ms": 7.046,
+        "wire_transit_projected_ms": 0.075,
         "total_wire_bytes": 233290
       },
+      "wire_compression_ratio": 1.83,
+      "projected_speedup_fp8_vs_fp16": 0.27,
+      "measured_loopback_speedup": 0.53,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 1.8057117953402282,
-        "p90_ms": 1.9037958367233456,
-        "p99_ms": 1.9037958367233456,
-        "codec_latency_ms": 1.543082995340228,
-        "total_wire_bytes": 820715
-      },
-      "compression_ratio": 3.52,
-      "speedup_fp8_vs_uncompressed": 0.32,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "25 Gbps",
       "bandwidth_bytes_per_sec": 3125000000.0,
       "seq_len": 64,
-      "uncompressed": {
-        "p50_ms": 2.351024760620663,
-        "p90_ms": 2.5306517977621352,
-        "p99_ms": 2.5306517977621352,
-        "codec_latency_ms": 1.8367070006206632,
-        "total_wire_bytes": 1607243
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 8.426,
+          "p90": 9.164,
+          "p99": 9.164
+        },
+        "projected_link_e2e_ms": {
+          "p50": 2.198,
+          "p90": 2.265,
+          "p99": 2.265
+        },
+        "codec_latency_ms": 1.935,
+        "wire_transit_projected_ms": 0.263,
+        "total_wire_bytes": 820715
       },
-      "fp8": {
-        "p50_ms": 6.35714609952637,
-        "p90_ms": 6.411229107379849,
-        "p99_ms": 6.411229107379849,
-        "codec_latency_ms": 6.219332979526371,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 14.43,
+          "p90": 14.761,
+          "p99": 14.761
+        },
+        "projected_link_e2e_ms": {
+          "p50": 7.641,
+          "p90": 7.74,
+          "p99": 7.74
+        },
+        "codec_latency_ms": 7.504,
+        "wire_transit_projected_ms": 0.138,
         "total_wire_bytes": 430666
       },
+      "wire_compression_ratio": 1.91,
+      "projected_speedup_fp8_vs_fp16": 0.29,
+      "measured_loopback_speedup": 0.58,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 2.351024760620663,
-        "p90_ms": 2.5306517977621352,
-        "p99_ms": 2.5306517977621352,
-        "codec_latency_ms": 1.8367070006206632,
-        "total_wire_bytes": 1607243
-      },
-      "compression_ratio": 3.73,
-      "speedup_fp8_vs_uncompressed": 0.37,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "25 Gbps",
       "bandwidth_bytes_per_sec": 3125000000.0,
       "seq_len": 128,
-      "uncompressed": {
-        "p50_ms": 3.6274142553738042,
-        "p90_ms": 3.8662492520815417,
-        "p99_ms": 3.8662492520815417,
-        "codec_latency_ms": 2.6097489753738046,
-        "total_wire_bytes": 3180204
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 8.561,
+          "p90": 9.345,
+          "p99": 9.345
+        },
+        "projected_link_e2e_ms": {
+          "p50": 2.545,
+          "p90": 2.673,
+          "p99": 2.673
+        },
+        "codec_latency_ms": 2.031,
+        "wire_transit_projected_ms": 0.514,
+        "total_wire_bytes": 1607340
       },
-      "fp8": {
-        "p50_ms": 7.676372811373878,
-        "p90_ms": 7.754622825131375,
-        "p99_ms": 7.754622825131375,
-        "codec_latency_ms": 7.4122080113738775,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 15.641,
+          "p90": 15.65,
+          "p99": 15.65
+        },
+        "projected_link_e2e_ms": {
+          "p50": 8.707,
+          "p90": 8.765,
+          "p99": 8.765
+        },
+        "codec_latency_ms": 8.443,
+        "wire_transit_projected_ms": 0.264,
         "total_wire_bytes": 825515
       },
+      "wire_compression_ratio": 1.95,
+      "projected_speedup_fp8_vs_fp16": 0.29,
+      "measured_loopback_speedup": 0.55,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 3.6274142553738042,
-        "p90_ms": 3.8662492520815417,
-        "p99_ms": 3.8662492520815417,
-        "codec_latency_ms": 2.6097489753738046,
-        "total_wire_bytes": 3180204
-      },
-      "compression_ratio": 3.85,
-      "speedup_fp8_vs_uncompressed": 0.47,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "25 Gbps",
       "bandwidth_bytes_per_sec": 3125000000.0,
       "seq_len": 256,
-      "uncompressed": {
-        "p50_ms": 5.667881280684462,
-        "p90_ms": 5.750922250596425,
-        "p99_ms": 5.750922250596425,
-        "codec_latency_ms": 3.6435830406844616,
-        "total_wire_bytes": 6325932
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 10.767,
+          "p90": 11.224,
+          "p99": 11.224
+        },
+        "projected_link_e2e_ms": {
+          "p50": 3.697,
+          "p90": 3.812,
+          "p99": 3.812
+        },
+        "codec_latency_ms": 2.68,
+        "wire_transit_projected_ms": 1.018,
+        "total_wire_bytes": 3180204
       },
-      "fp8": {
-        "p50_ms": 11.796190237198017,
-        "p90_ms": 14.101065238043658,
-        "p99_ms": 14.101065238043658,
-        "codec_latency_ms": 11.279291997198015,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 20.89,
+          "p90": 23.68,
+          "p99": 23.68
+        },
+        "projected_link_e2e_ms": {
+          "p50": 13.81,
+          "p90": 16.357,
+          "p99": 16.357
+        },
+        "codec_latency_ms": 13.294,
+        "wire_transit_projected_ms": 0.517,
         "total_wire_bytes": 1615307
       },
+      "wire_compression_ratio": 1.97,
+      "projected_speedup_fp8_vs_fp16": 0.27,
+      "measured_loopback_speedup": 0.52,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 5.667881280684462,
-        "p90_ms": 5.750922250596425,
-        "p99_ms": 5.750922250596425,
-        "codec_latency_ms": 3.6435830406844616,
-        "total_wire_bytes": 6325932
-      },
-      "compression_ratio": 3.92,
-      "speedup_fp8_vs_uncompressed": 0.48,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "25 Gbps",
       "bandwidth_bytes_per_sec": 3125000000.0,
       "seq_len": 512,
-      "uncompressed": {
-        "p50_ms": 10.91271987280274,
-        "p90_ms": 11.16134592194507,
-        "p99_ms": 11.16134592194507,
-        "codec_latency_ms": 6.875124992802739,
-        "total_wire_bytes": 12617484
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 15.042,
+          "p90": 15.851,
+          "p99": 15.851
+        },
+        "projected_link_e2e_ms": {
+          "p50": 8.042,
+          "p90": 8.287,
+          "p99": 8.287
+        },
+        "codec_latency_ms": 6.017,
+        "wire_transit_projected_ms": 2.024,
+        "total_wire_bytes": 6325932
       },
-      "fp8": {
-        "p50_ms": 23.886388774635066,
-        "p90_ms": 32.21288779904114,
-        "p99_ms": 32.21288779904114,
-        "codec_latency_ms": 22.864207974635065,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 39.001,
+          "p90": 40.299,
+          "p99": 40.299
+        },
+        "projected_link_e2e_ms": {
+          "p50": 30.187,
+          "p90": 31.634,
+          "p99": 31.634
+        },
+        "codec_latency_ms": 29.165,
+        "wire_transit_projected_ms": 1.022,
         "total_wire_bytes": 3194315
       },
+      "wire_compression_ratio": 1.98,
+      "projected_speedup_fp8_vs_fp16": 0.27,
+      "measured_loopback_speedup": 0.39,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 10.91271987280274,
-        "p90_ms": 11.16134592194507,
-        "p99_ms": 11.16134592194507,
-        "codec_latency_ms": 6.875124992802739,
-        "total_wire_bytes": 12617484
-      },
-      "compression_ratio": 3.95,
-      "speedup_fp8_vs_uncompressed": 0.46,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "25 Gbps",
       "bandwidth_bytes_per_sec": 3125000000.0,
       "seq_len": 1024,
-      "uncompressed": {
-        "p50_ms": 21.96169978682525,
-        "p90_ms": 22.56557475751839,
-        "p99_ms": 22.56557475751839,
-        "codec_latency_ms": 13.89754202682525,
-        "total_wire_bytes": 25200493
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 24.309,
+          "p90": 26.196,
+          "p99": 26.196
+        },
+        "projected_link_e2e_ms": {
+          "p50": 17.543,
+          "p90": 18.099,
+          "p99": 18.099
+        },
+        "codec_latency_ms": 13.505,
+        "wire_transit_projected_ms": 4.038,
+        "total_wire_bytes": 12617581
       },
-      "fp8": {
-        "p50_ms": 59.44465195370426,
-        "p90_ms": 66.24690194457358,
-        "p99_ms": 66.24690194457358,
-        "codec_latency_ms": 57.41187499370426,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 66.484,
+          "p90": 76.728,
+          "p99": 76.728
+        },
+        "projected_link_e2e_ms": {
+          "p50": 57.759,
+          "p90": 66.164,
+          "p99": 66.164
+        },
+        "codec_latency_ms": 55.726,
+        "wire_transit_projected_ms": 2.033,
         "total_wire_bytes": 6352428
       },
+      "wire_compression_ratio": 1.99,
+      "projected_speedup_fp8_vs_fp16": 0.3,
+      "measured_loopback_speedup": 0.37,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 21.96169978682525,
-        "p90_ms": 22.56557475751839,
-        "p99_ms": 22.56557475751839,
-        "codec_latency_ms": 13.89754202682525,
-        "total_wire_bytes": 25200493
-      },
-      "compression_ratio": 3.97,
-      "speedup_fp8_vs_uncompressed": 0.37,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "100 Gbps",
       "bandwidth_bytes_per_sec": 12500000000.0,
       "seq_len": 8,
-      "uncompressed": {
-        "p50_ms": 1.6003785930182397,
-        "p90_ms": 1.650086538454479,
-        "p99_ms": 1.650086538454479,
-        "codec_latency_ms": 1.5819169930182397,
-        "total_wire_bytes": 230770
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 7.845,
+          "p90": 8.013,
+          "p99": 8.013
+        },
+        "projected_link_e2e_ms": {
+          "p50": 1.803,
+          "p90": 1.852,
+          "p99": 1.852
+        },
+        "codec_latency_ms": 1.792,
+        "wire_transit_projected_ms": 0.011,
+        "total_wire_bytes": 132466
       },
-      "fp8": {
-        "p50_ms": 6.142758489529292,
-        "p90_ms": 6.174216412416349,
-        "p99_ms": 6.174216412416349,
-        "codec_latency_ms": 6.132000009529293,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 14.61,
+          "p90": 14.93,
+          "p99": 14.93
+        },
+        "projected_link_e2e_ms": {
+          "p50": 7.124,
+          "p90": 7.878,
+          "p99": 7.878
+        },
+        "codec_latency_ms": 7.113,
+        "wire_transit_projected_ms": 0.011,
         "total_wire_bytes": 134481
       },
+      "wire_compression_ratio": 0.99,
+      "projected_speedup_fp8_vs_fp16": 0.25,
+      "measured_loopback_speedup": 0.54,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 1.6003785930182397,
-        "p90_ms": 1.650086538454479,
-        "p99_ms": 1.650086538454479,
-        "codec_latency_ms": 1.5819169930182397,
-        "total_wire_bytes": 230770
-      },
-      "compression_ratio": 1.72,
-      "speedup_fp8_vs_uncompressed": 0.26,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "100 Gbps",
       "bandwidth_bytes_per_sec": 12500000000.0,
       "seq_len": 16,
-      "uncompressed": {
-        "p50_ms": 1.6883669392964376,
-        "p90_ms": 1.8047829014076424,
-        "p99_ms": 1.8047829014076424,
-        "codec_latency_ms": 1.6541670192964375,
-        "total_wire_bytes": 427499
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 7.901,
+          "p90": 7.919,
+          "p99": 7.919
+        },
+        "projected_link_e2e_ms": {
+          "p50": 2.021,
+          "p90": 2.131,
+          "p99": 2.131
+        },
+        "codec_latency_ms": 2.002,
+        "wire_transit_projected_ms": 0.018,
+        "total_wire_bytes": 230891
       },
-      "fp8": {
-        "p50_ms": 5.154768155198101,
-        "p90_ms": 5.18043517252386,
-        "p99_ms": 5.18043517252386,
-        "codec_latency_ms": 5.143999995198101,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 13.263,
+          "p90": 13.375,
+          "p99": 13.375
+        },
+        "projected_link_e2e_ms": {
+          "p50": 6.006,
+          "p90": 6.364,
+          "p99": 6.364
+        },
+        "codec_latency_ms": 5.996,
+        "wire_transit_projected_ms": 0.011,
         "total_wire_bytes": 134602
       },
+      "wire_compression_ratio": 1.72,
+      "projected_speedup_fp8_vs_fp16": 0.34,
+      "measured_loopback_speedup": 0.6,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 1.6883669392964376,
-        "p90_ms": 1.8047829014076424,
-        "p99_ms": 1.8047829014076424,
-        "codec_latency_ms": 1.6541670192964375,
-        "total_wire_bytes": 427499
-      },
-      "compression_ratio": 3.18,
-      "speedup_fp8_vs_uncompressed": 0.33,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "100 Gbps",
       "bandwidth_bytes_per_sec": 12500000000.0,
       "seq_len": 32,
-      "uncompressed": {
-        "p50_ms": 1.7535322175237653,
-        "p90_ms": 1.7697811771060643,
-        "p99_ms": 1.7697811771060643,
-        "codec_latency_ms": 1.6878750175237656,
-        "total_wire_bytes": 820715
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 7.815,
+          "p90": 7.837,
+          "p99": 7.837
+        },
+        "projected_link_e2e_ms": {
+          "p50": 1.847,
+          "p90": 2.109,
+          "p99": 2.109
+        },
+        "codec_latency_ms": 1.812,
+        "wire_transit_projected_ms": 0.034,
+        "total_wire_bytes": 427499
       },
-      "fp8": {
-        "p50_ms": 6.008204208602828,
-        "p90_ms": 6.137996232984286,
-        "p99_ms": 6.137996232984286,
-        "codec_latency_ms": 5.989541008602828,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 14.436,
+          "p90": 15.007,
+          "p99": 15.007
+        },
+        "projected_link_e2e_ms": {
+          "p50": 7.124,
+          "p90": 7.383,
+          "p99": 7.383
+        },
+        "codec_latency_ms": 7.105,
+        "wire_transit_projected_ms": 0.019,
         "total_wire_bytes": 233290
       },
+      "wire_compression_ratio": 1.83,
+      "projected_speedup_fp8_vs_fp16": 0.26,
+      "measured_loopback_speedup": 0.54,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 1.7535322175237653,
-        "p90_ms": 1.7697811771060643,
-        "p99_ms": 1.7697811771060643,
-        "codec_latency_ms": 1.6878750175237656,
-        "total_wire_bytes": 820715
-      },
-      "compression_ratio": 3.52,
-      "speedup_fp8_vs_uncompressed": 0.29,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "100 Gbps",
       "bandwidth_bytes_per_sec": 12500000000.0,
       "seq_len": 64,
-      "uncompressed": {
-        "p50_ms": 2.0023293885723676,
-        "p90_ms": 2.0604124850914802,
-        "p99_ms": 2.0604124850914802,
-        "codec_latency_ms": 1.8737499485723674,
-        "total_wire_bytes": 1607243
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 8.301,
+          "p90": 8.654,
+          "p99": 8.654
+        },
+        "projected_link_e2e_ms": {
+          "p50": 1.986,
+          "p90": 2.223,
+          "p99": 2.223
+        },
+        "codec_latency_ms": 1.92,
+        "wire_transit_projected_ms": 0.066,
+        "total_wire_bytes": 820715
       },
-      "fp8": {
-        "p50_ms": 6.487245254879801,
-        "p90_ms": 6.704494347991406,
-        "p99_ms": 6.704494347991406,
-        "codec_latency_ms": 6.452791974879801,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 14.768,
+          "p90": 15.079,
+          "p99": 15.079
+        },
+        "projected_link_e2e_ms": {
+          "p50": 7.504,
+          "p90": 7.62,
+          "p99": 7.62
+        },
+        "codec_latency_ms": 7.47,
+        "wire_transit_projected_ms": 0.034,
         "total_wire_bytes": 430666
       },
+      "wire_compression_ratio": 1.91,
+      "projected_speedup_fp8_vs_fp16": 0.26,
+      "measured_loopback_speedup": 0.56,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 2.0023293885723676,
-        "p90_ms": 2.0604124850914802,
-        "p99_ms": 2.0604124850914802,
-        "codec_latency_ms": 1.8737499485723674,
-        "total_wire_bytes": 1607243
-      },
-      "compression_ratio": 3.73,
-      "speedup_fp8_vs_uncompressed": 0.31,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "100 Gbps",
       "bandwidth_bytes_per_sec": 12500000000.0,
       "seq_len": 128,
-      "uncompressed": {
-        "p50_ms": 2.571333321735419,
-        "p90_ms": 2.979916293166734,
-        "p99_ms": 2.979916293166734,
-        "codec_latency_ms": 2.316917001735419,
-        "total_wire_bytes": 3180204
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 9.111,
+          "p90": 9.519,
+          "p99": 9.519
+        },
+        "projected_link_e2e_ms": {
+          "p50": 2.195,
+          "p90": 2.31,
+          "p99": 2.31
+        },
+        "codec_latency_ms": 2.066,
+        "wire_transit_projected_ms": 0.129,
+        "total_wire_bytes": 1607340
       },
-      "fp8": {
-        "p50_ms": 7.595415120988291,
-        "p90_ms": 7.7555832206710695,
-        "p99_ms": 7.7555832206710695,
-        "codec_latency_ms": 7.5293739209882915,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 16.371,
+          "p90": 16.513,
+          "p99": 16.513
+        },
+        "projected_link_e2e_ms": {
+          "p50": 8.402,
+          "p90": 8.475,
+          "p99": 8.475
+        },
+        "codec_latency_ms": 8.336,
+        "wire_transit_projected_ms": 0.066,
         "total_wire_bytes": 825515
       },
+      "wire_compression_ratio": 1.95,
+      "projected_speedup_fp8_vs_fp16": 0.26,
+      "measured_loopback_speedup": 0.56,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 2.571333321735419,
-        "p90_ms": 2.979916293166734,
-        "p99_ms": 2.979916293166734,
-        "codec_latency_ms": 2.316917001735419,
-        "total_wire_bytes": 3180204
-      },
-      "compression_ratio": 3.85,
-      "speedup_fp8_vs_uncompressed": 0.34,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "100 Gbps",
       "bandwidth_bytes_per_sec": 12500000000.0,
       "seq_len": 256,
-      "uncompressed": {
-        "p50_ms": 4.223573530218003,
-        "p90_ms": 4.483325566290317,
-        "p99_ms": 4.483325566290317,
-        "codec_latency_ms": 3.717498970218003,
-        "total_wire_bytes": 6325932
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 11.654,
+          "p90": 11.727,
+          "p99": 11.727
+        },
+        "projected_link_e2e_ms": {
+          "p50": 3.212,
+          "p90": 3.232,
+          "p99": 3.232
+        },
+        "codec_latency_ms": 2.957,
+        "wire_transit_projected_ms": 0.254,
+        "total_wire_bytes": 3180204
       },
-      "fp8": {
-        "p50_ms": 13.99030757812783,
-        "p90_ms": 16.750141631122677,
-        "p99_ms": 16.750141631122677,
-        "codec_latency_ms": 13.861083018127829,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 23.042,
+          "p90": 23.463,
+          "p99": 23.463
+        },
+        "projected_link_e2e_ms": {
+          "p50": 14.547,
+          "p90": 14.779,
+          "p99": 14.779
+        },
+        "codec_latency_ms": 14.417,
+        "wire_transit_projected_ms": 0.129,
         "total_wire_bytes": 1615307
       },
+      "wire_compression_ratio": 1.97,
+      "projected_speedup_fp8_vs_fp16": 0.22,
+      "measured_loopback_speedup": 0.51,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 4.223573530218003,
-        "p90_ms": 4.483325566290317,
-        "p99_ms": 4.483325566290317,
-        "codec_latency_ms": 3.717498970218003,
-        "total_wire_bytes": 6325932
-      },
-      "compression_ratio": 3.92,
-      "speedup_fp8_vs_uncompressed": 0.3,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "100 Gbps",
       "bandwidth_bytes_per_sec": 12500000000.0,
       "seq_len": 512,
-      "uncompressed": {
-        "p50_ms": 8.905440625041784,
-        "p90_ms": 8.969857704598518,
-        "p99_ms": 8.969857704598518,
-        "codec_latency_ms": 7.896041905041784,
-        "total_wire_bytes": 12617484
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 16.984,
+          "p90": 17.129,
+          "p99": 17.129
+        },
+        "projected_link_e2e_ms": {
+          "p50": 6.778,
+          "p90": 6.992,
+          "p99": 6.992
+        },
+        "codec_latency_ms": 6.272,
+        "wire_transit_projected_ms": 0.506,
+        "total_wire_bytes": 6325932
       },
-      "fp8": {
-        "p50_ms": 24.38150422569592,
-        "p90_ms": 32.27217018759106,
-        "p99_ms": 32.27217018759106,
-        "codec_latency_ms": 24.12595902569592,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 41.323,
+          "p90": 72.437,
+          "p99": 72.437
+        },
+        "projected_link_e2e_ms": {
+          "p50": 29.608,
+          "p90": 34.251,
+          "p99": 34.251
+        },
+        "codec_latency_ms": 29.353,
+        "wire_transit_projected_ms": 0.256,
         "total_wire_bytes": 3194315
       },
+      "wire_compression_ratio": 1.98,
+      "projected_speedup_fp8_vs_fp16": 0.23,
+      "measured_loopback_speedup": 0.41,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 8.905440625041784,
-        "p90_ms": 8.969857704598518,
-        "p99_ms": 8.969857704598518,
-        "codec_latency_ms": 7.896041905041784,
-        "total_wire_bytes": 12617484
-      },
-      "compression_ratio": 3.95,
-      "speedup_fp8_vs_uncompressed": 0.37,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     },
     {
       "bandwidth": "100 Gbps",
       "bandwidth_bytes_per_sec": 12500000000.0,
       "seq_len": 1024,
-      "uncompressed": {
-        "p50_ms": 18.3127064286373,
-        "p90_ms": 18.473331458458247,
-        "p99_ms": 18.473331458458247,
-        "codec_latency_ms": 16.2966669886373,
-        "total_wire_bytes": 25200493
+      "uncompressed_fp16": {
+        "measured_loopback_ms": {
+          "p50": 28.556,
+          "p90": 29.16,
+          "p99": 29.16
+        },
+        "projected_link_e2e_ms": {
+          "p50": 16.71,
+          "p90": 16.95,
+          "p99": 16.95
+        },
+        "codec_latency_ms": 15.7,
+        "wire_transit_projected_ms": 1.009,
+        "total_wire_bytes": 12617581
       },
-      "fp8": {
-        "p50_ms": 55.37894423837205,
-        "p90_ms": 61.39452828579014,
-        "p99_ms": 61.39452828579014,
-        "codec_latency_ms": 54.87074999837205,
+      "block_fp8": {
+        "measured_loopback_ms": {
+          "p50": 76.945,
+          "p90": 83.598,
+          "p99": 83.598
+        },
+        "projected_link_e2e_ms": {
+          "p50": 66.232,
+          "p90": 71.622,
+          "p99": 71.622
+        },
+        "codec_latency_ms": 65.723,
+        "wire_transit_projected_ms": 0.508,
         "total_wire_bytes": 6352428
       },
+      "wire_compression_ratio": 1.99,
+      "projected_speedup_fp8_vs_fp16": 0.25,
+      "measured_loopback_speedup": 0.37,
+      "fp8_helps": false,
+      "empirical_winner": "uncompressed_fp16",
       "policy_selection": "uncompressed_fp16",
-      "policy_result": {
-        "p50_ms": 18.3127064286373,
-        "p90_ms": 18.473331458458247,
-        "p99_ms": 18.473331458458247,
-        "codec_latency_ms": 16.2966669886373,
-        "total_wire_bytes": 25200493
-      },
-      "compression_ratio": 3.97,
-      "speedup_fp8_vs_uncompressed": 0.33,
-      "fp8_helps": false
+      "policy_matches_empirical": true,
+      "policy_regret_pct": 0.0
     }
   ]
 }

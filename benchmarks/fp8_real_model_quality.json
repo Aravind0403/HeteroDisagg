@@ -33,6 +33,21 @@
       "avg_cosine_similarity": 0.99932,
       "avg_mean_absolute_logit_error": 0.0891
     },
+    "token_weighted_continuation_steps": {
+      "total_continuation_tokens": 45,
+      "weighted_delta_nll": -0.015,
+      "weighted_top1_agreement_pct": 93.3,
+      "weighted_top5_overlap_pct": 96.9,
+      "weighted_cosine_similarity": 0.99931,
+      "weighted_mean_absolute_logit_error": 0.0896
+    },
+    "worst_case_continuation_steps": {
+      "max_abs_delta_nll": 0.0322,
+      "min_top1_agreement_pct": 88.2,
+      "min_top5_overlap_pct": 96.5,
+      "min_cosine_similarity": 0.99914,
+      "max_mean_absolute_logit_error": 0.0974
+    },
     "overall_sequence": {
       "avg_delta_nll": -0.0124,
       "avg_top1_agreement_pct": 93.9,
@@ -42,6 +57,8 @@
     "compression": {
       "avg_ratio_vs_fp32": 3.24,
       "avg_ratio_vs_fp16": 1.62,
+      "avg_tensor_body_reduction_vs_fp16_pct": 38.0,
+      "avg_total_wire_reduction_vs_fp16_pct": 34.7,
       "avg_wire_reduction_vs_fp16_pct": 38.0
     }
   },
@@ -53,10 +70,15 @@
       "compression": {
         "uncompressed_fp32_bytes": 294912,
         "uncompressed_fp16_bytes": 147456,
+        "tensor_body_bytes_fp8": 98688,
         "wire_payload_bytes": 98688,
         "ratio_vs_fp32": 2.99,
         "ratio_vs_fp16": 1.49,
-        "wire_reduction_vs_fp16_pct": 33.1
+        "tensor_body_reduction_vs_fp16_pct": 33.1,
+        "wire_reduction_vs_fp16_pct": 33.1,
+        "total_wire_reduction_vs_fp16_pct": 30.0,
+        "estimated_full_wire_fp16_bytes": 162656,
+        "estimated_full_wire_fp8_bytes": 113888
       },
       "boundary_step": {
         "target_token": 21725,
@@ -92,10 +114,15 @@
       "compression": {
         "uncompressed_fp32_bytes": 344064,
         "uncompressed_fp16_bytes": 172032,
+        "tensor_body_bytes_fp8": 98688,
         "wire_payload_bytes": 98688,
         "ratio_vs_fp32": 3.49,
         "ratio_vs_fp16": 1.74,
-        "wire_reduction_vs_fp16_pct": 42.6
+        "tensor_body_reduction_vs_fp16_pct": 42.6,
+        "wire_reduction_vs_fp16_pct": 42.6,
+        "total_wire_reduction_vs_fp16_pct": 39.2,
+        "estimated_full_wire_fp16_bytes": 187232,
+        "estimated_full_wire_fp8_bytes": 113888
       },
       "boundary_step": {
         "target_token": 13794,
@@ -131,10 +158,15 @@
       "compression": {
         "uncompressed_fp32_bytes": 319488,
         "uncompressed_fp16_bytes": 159744,
+        "tensor_body_bytes_fp8": 98688,
         "wire_payload_bytes": 98688,
         "ratio_vs_fp32": 3.24,
         "ratio_vs_fp16": 1.62,
-        "wire_reduction_vs_fp16_pct": 38.2
+        "tensor_body_reduction_vs_fp16_pct": 38.2,
+        "wire_reduction_vs_fp16_pct": 38.2,
+        "total_wire_reduction_vs_fp16_pct": 34.9,
+        "estimated_full_wire_fp16_bytes": 174944,
+        "estimated_full_wire_fp8_bytes": 113888
       },
       "boundary_step": {
         "target_token": 11879,

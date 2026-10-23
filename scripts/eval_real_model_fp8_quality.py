@@ -66,17 +66,17 @@ BENCHMARK_CORPUS = [
 # Multi-context length held-out evaluation corpus spanning short to long prompt lengths
 EXPANDED_BENCHMARK_CORPUS = [
     {
-        "category": "Systems & Prefill (~16 tok)",
+        "category": "Systems & Prefill (24 ctx tok)",
         "context": "Distributed inference engines disaggregate prefill and decode stages to eliminate memory bandwidth interference and maximize compute saturation across heterogeneous clusters.",
         "target": " By decoupling compute-bound prefill from memory-bound decode, clusters achieve near-optimal throughput and bounded latency.",
     },
     {
-        "category": "Quantization Math (~32 tok)",
+        "category": "Quantization Math (37 ctx tok)",
         "context": "Block-scaled quantization divides floating point activation tensors into contiguous tiles, computing a local maximum absolute scale factor for each block to minimize roundoff error while preserving dynamic numerical range across outliers.",
         "target": " When applied to key and value caches, block scaling bounds precision loss to isolated head dimensions.",
     },
     {
-        "category": "Distributed Consensus (~64 tok)",
+        "category": "Distributed Consensus (65 ctx tok)",
         "context": (
             "In distributed consensus protocols such as Raft and Paxos, replica state machines maintain identical execution histories "
             "by appending log entries proposed by an elected leader. When network partitions isolate the leader from a quorum, the cluster "
@@ -85,7 +85,7 @@ EXPANDED_BENCHMARK_CORPUS = [
         "target": " This ensures linearizable consistency across write operations while allowing healthy minor partitions to continue serving reads.",
     },
     {
-        "category": "Compiler Infrastructure (~128 tok)",
+        "category": "Compiler Infrastructure (93 ctx tok)",
         "context": (
             "Modern deep learning compilers lower high-level computation graphs into intermediate representations to perform target-independent "
             "optimizations such as dead code elimination, constant folding, and operator fusion. During loop tiling and polyhedral scheduling, "
@@ -96,7 +96,7 @@ EXPANDED_BENCHMARK_CORPUS = [
         "target": " Kernel fusion reduces memory traffic between off-chip DRAM and on-chip SRAM by keeping intermediate activation tiles resident in registers.",
     },
     {
-        "category": "Computer Architecture (~256 tok)",
+        "category": "Computer Architecture (193 ctx tok)",
         "context": (
             "Modern multiprocessor memory subsystems rely on hierarchical cache organizations to bridge the widening latency gap between "
             "fast execution cores and high-capacity dynamic random-access memory. Each processing core incorporates dedicated Level 1 instruction "
@@ -311,7 +311,14 @@ def evaluate_passage_fp8_quality(
     total_uncompressed_fp16_bytes = total_uncompressed_fp32_bytes // 2
     comp_ratio_fp32 = total_uncompressed_fp32_bytes / max(1, total_wire_bytes)
     comp_ratio_fp16 = total_uncompressed_fp16_bytes / max(1, total_wire_bytes)
-    wire_reduction_fp16_pct = (1.0 - (total_wire_bytes / max(1, total_uncompressed_fp16_bytes))) * 100.0
+    tensor_body_reduction_fp16_pct = (1.0 - (total_wire_bytes / max(1, total_uncompressed_fp16_bytes))) * 100.0
+
+    # Framing-inclusive wire calculation (frames + manifest overhead)
+    num_frames = num_layers * 2 * prefill_tp
+    framing_and_metadata_bytes = num_frames * 150 + 800
+    full_wire_uncompressed_fp16 = total_uncompressed_fp16_bytes + framing_and_metadata_bytes
+    full_wire_compressed_fp8 = total_wire_bytes + framing_and_metadata_bytes
+    total_wire_reduction_fp16_pct = (1.0 - (full_wire_compressed_fp8 / max(1, full_wire_uncompressed_fp16))) * 100.0
 
     return {
         "context_length": prompt_len,
@@ -320,10 +327,15 @@ def evaluate_passage_fp8_quality(
         "compression": {
             "uncompressed_fp32_bytes": total_uncompressed_fp32_bytes,
             "uncompressed_fp16_bytes": total_uncompressed_fp16_bytes,
+            "tensor_body_bytes_fp8": total_wire_bytes,
             "wire_payload_bytes": total_wire_bytes,
             "ratio_vs_fp32": round(comp_ratio_fp32, 2),
             "ratio_vs_fp16": round(comp_ratio_fp16, 2),
-            "wire_reduction_vs_fp16_pct": round(wire_reduction_fp16_pct, 1),
+            "tensor_body_reduction_vs_fp16_pct": round(tensor_body_reduction_fp16_pct, 1),
+            "wire_reduction_vs_fp16_pct": round(tensor_body_reduction_fp16_pct, 1),
+            "total_wire_reduction_vs_fp16_pct": round(total_wire_reduction_fp16_pct, 1),
+            "estimated_full_wire_fp16_bytes": full_wire_uncompressed_fp16,
+            "estimated_full_wire_fp8_bytes": full_wire_compressed_fp8,
         },
         "boundary_step": {
             "target_token": int(target_tokens[0]),
@@ -431,7 +443,8 @@ def run_full_fp8_quality_benchmark(
     # Compression averages
     avg_comp_fp32 = sum(p["compression"]["ratio_vs_fp32"] for p in passage_results) / n
     avg_comp_fp16 = sum(p["compression"]["ratio_vs_fp16"] for p in passage_results) / n
-    avg_reduction_fp16 = sum(p["compression"]["wire_reduction_vs_fp16_pct"] for p in passage_results) / n
+    avg_tensor_reduction_fp16 = sum(p["compression"]["tensor_body_reduction_vs_fp16_pct"] for p in passage_results) / n
+    avg_total_wire_reduction_fp16 = sum(p["compression"]["total_wire_reduction_vs_fp16_pct"] for p in passage_results) / n
 
     # Check against criteria
     criteria_checks = {
@@ -447,8 +460,8 @@ def run_full_fp8_quality_benchmark(
     is_expanded = (corpus == EXPANDED_BENCHMARK_CORPUS)
     eval_scope = "multi_context_length_evaluation" if is_expanded else "diagnostic_smoke_test_curated_passages"
     scope_disclaimer = (
-        "Multi-context length evaluation across diverse held-out passages (short to 256+ tokens) "
-        "reporting macro-averages, token-weighted aggregates, and worst-case metrics."
+        "Multi-context length evaluation across diverse held-out passages (context lengths: 24, 37, 65, 93, 193 tokens) "
+        "reporting macro-averages, token-weighted aggregates, worst-case metrics, and explicit tensor-body vs total wire reductions."
         if is_expanded
         else (
             "Diagnostic smoke test across 3 curated passages (48 target tokens) designed to verify "
@@ -502,7 +515,9 @@ def run_full_fp8_quality_benchmark(
             "compression": {
                 "avg_ratio_vs_fp32": round(avg_comp_fp32, 2),
                 "avg_ratio_vs_fp16": round(avg_comp_fp16, 2),
-                "avg_wire_reduction_vs_fp16_pct": round(avg_reduction_fp16, 1),
+                "avg_tensor_body_reduction_vs_fp16_pct": round(avg_tensor_reduction_fp16, 1),
+                "avg_total_wire_reduction_vs_fp16_pct": round(avg_total_wire_reduction_fp16, 1),
+                "avg_wire_reduction_vs_fp16_pct": round(avg_tensor_reduction_fp16, 1),
             },
         },
         "passages": passage_results,
@@ -542,7 +557,7 @@ def main(model: str, block_size: int, mode: str, output: Optional[str]):
         title="Passage-by-Passage Metrics (Continuation Steps / Positions Attending to Reconstructed Cache)",
         header_style="bold magenta",
     )
-    table.add_column("Category", style="cyan", width=25)
+    table.add_column("Category", style="cyan", width=32)
     table.add_column("Context", justify="right", style="dim")
     table.add_column("Tokens", justify="right", style="white")
     table.add_column("NLL (Base)", justify="right", style="dim")
@@ -601,9 +616,10 @@ def main(model: str, block_size: int, mode: str, output: Optional[str]):
         f"    Min Top-5 Overlap:         [bold yellow]{s_worst['min_top5_overlap_pct']:.1f}%[/bold yellow]\n"
         f"    Min Cosine Similarity:     [bold yellow]{s_worst['min_cosine_similarity']:.5f}[/bold yellow]\n"
         f"    Max Logit MAE:             [white]{s_worst['max_mean_absolute_logit_error']:.4f}[/white]\n\n"
-        f"[bold]Wire Compression Ratios (Explicit Denominators):[/bold]\n"
+        f"[bold]Wire & Tensor Compression Ratios (Explicit Denominators):[/bold]\n"
         f"  Relative to in-memory FP32 tensor cache:   [bold green]{s_comp['avg_ratio_vs_fp32']:.2f}x[/bold green]\n"
-        f"  Relative to unpadded FP16/BF16 wire cache: [bold green]{s_comp['avg_ratio_vs_fp16']:.2f}x[/bold green] ({s_comp['avg_wire_reduction_vs_fp16_pct']:.1f}% wire payload reduction)\n\n"
+        f"  Relative to unpadded FP16/BF16 tensor cache: [bold green]{s_comp['avg_ratio_vs_fp16']:.2f}x[/bold green] ({s_comp['avg_tensor_body_reduction_vs_fp16_pct']:.1f}% tensor-body reduction, excludes socket framing)\n"
+        f"  Total wire savings (including socket framing & JSON headers): [bold green]{s_comp['avg_total_wire_reduction_vs_fp16_pct']:.1f}% net wire reduction[/bold green]\n\n"
         f"[bold]Acceptance Status:[/bold] {'[bold green]ALL CRITERIA PASSED[/bold green]' if all_passed else '[bold red]FAILED THRESHOLDS[/bold red]'}\n"
     )
 

@@ -91,14 +91,17 @@ def benchmark_single_handoff(
     prefill_tp = plan.prefill_tp
     decode_tp = plan.decode_tp
 
-    total_e2e_latencies = []
+    measured_loopback_latencies = []
+    projected_link_latencies = []
     codec_latencies = []
     wire_bytes_list = []
+    projected_wire_transits = []
 
     for _ in range(num_iterations):
-        t0 = time.perf_counter()
+        t_handoff_start = time.perf_counter()
 
         # Step 1: Serialization and Encoding
+        t_enc_start = time.perf_counter()
         payloads_k = []
         payloads_v = []
         for l in range(num_layers):
@@ -118,8 +121,7 @@ def benchmark_single_handoff(
                 payloads_k.extend(p_k)
                 payloads_v.extend(p_v)
 
-        t_enc_end = time.perf_counter()
-        t_encoding = t_enc_end - t0
+        t_encoding = time.perf_counter() - t_enc_start
 
         # Step 2: Frame Packing and Socket Transfer
         server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -145,7 +147,7 @@ def benchmark_single_handoff(
             initial_decode_token=1,
             initial_decode_token_str="tok",
             prompt_tokens=[1] * min(16, seq_len),
-            dtype="float32",
+            dtype="float16",
             enable_fp8=enable_fp8,
             block_size_tokens=block_size_tokens,
             decode_rank=0,
@@ -201,12 +203,12 @@ def benchmark_single_handoff(
                         scale_shape=list(fp8_data.scale_factors.shape),
                         scale_dtype="float32",
                         original_shape=list(fp8_data.original_shape),
-                        original_dtype="float32",
+                        original_dtype="float16",
                         block_size_tokens=fp8_data.block_size_tokens,
                         body_bytes=len(body),
                     )
                 else:
-                    body = p.data.cpu().numpy().tobytes()
+                    body = p.data.to(torch.float16).cpu().numpy().tobytes()
                     meta = FrameMetadata(
                         request_id="bench-req",
                         kv_type=p.kv_type or "key",
@@ -217,7 +219,7 @@ def benchmark_single_handoff(
                         end_head_idx=p.end_head_idx,
                         is_quantized=False,
                         shape=list(p.data.shape),
-                        dtype="float32",
+                        dtype="float16",
                         body_bytes=len(body),
                     )
 
@@ -237,25 +239,35 @@ def benchmark_single_handoff(
             conn.close()
             server_sock.close()
 
-        # Step 4: Emulate Link Transmission Time
-        t_transmission = total_bytes / link_bandwidth_bytes_per_sec
+        t_handoff_end = time.perf_counter()
+        measured_wall_latency_ms = (t_handoff_end - t_handoff_start) * 1000.0
+        codec_latency_ms = (t_encoding + t_decoding) * 1000.0
 
-        # Complete end-to-end handoff latency
-        total_lat = t_encoding + t_transmission + t_decoding
-        total_e2e_latencies.append(total_lat * 1000.0)  # in ms
-        codec_latencies.append((t_encoding + t_decoding) * 1000.0)
+        # Step 4: Analytical Link Transmission Projection
+        t_wire_transit_ms = (total_bytes / link_bandwidth_bytes_per_sec) * 1000.0
+        # Complete projected latency under emulated link bandwidth:
+        # Codec computational overhead + network wire transit time
+        projected_link_lat_ms = codec_latency_ms + t_wire_transit_ms
+
+        measured_loopback_latencies.append(measured_wall_latency_ms)
+        projected_link_latencies.append(projected_link_lat_ms)
+        codec_latencies.append(codec_latency_ms)
         wire_bytes_list.append(total_bytes)
+        projected_wire_transits.append(t_wire_transit_ms)
 
-    total_e2e_latencies.sort()
-    p50 = statistics.median(total_e2e_latencies)
-    p90 = total_e2e_latencies[int(0.9 * len(total_e2e_latencies))]
-    p99 = total_e2e_latencies[-1]
+    def calc_stats(arr: List[float]) -> Dict[str, float]:
+        arr_sorted = sorted(arr)
+        return {
+            "p50": round(statistics.median(arr_sorted), 3),
+            "p90": round(arr_sorted[int(0.9 * len(arr_sorted))], 3),
+            "p99": round(arr_sorted[-1], 3),
+        }
 
     return {
-        "p50_ms": p50,
-        "p90_ms": p90,
-        "p99_ms": p99,
-        "codec_latency_ms": statistics.median(codec_latencies),
+        "measured_loopback_ms": calc_stats(measured_loopback_latencies),
+        "projected_link_e2e_ms": calc_stats(projected_link_latencies),
+        "codec_latency_ms": round(statistics.median(codec_latencies), 3),
+        "wire_transit_projected_ms": round(statistics.median(projected_wire_transits), 3),
         "total_wire_bytes": wire_bytes_list[0],
     }
 
@@ -272,7 +284,7 @@ def run_controlled_transfer_sweep(
     num_iterations: int = 5,
 ) -> Dict[str, Any]:
     """
-    Executes full sweep comparing Uncompressed, Block-scaled FP8, and Adaptive Policy.
+    Executes full sweep comparing actual Uncompressed FP16, Block-scaled FP8, and Adaptive Policy.
     """
     plan = KVPartitionPlan.create(num_kv_heads, prefill_tp, decode_tp)
     policy = AdaptiveCompressionPolicy()
@@ -283,10 +295,10 @@ def run_controlled_transfer_sweep(
         bw_bps = BANDWIDTH_TIERS[bw_name]
 
         for s in seq_lengths:
-            # Pre-allocate cache in memory for this sequence length
+            # Pre-allocate actual FP16 cache tensors in memory
             torch.manual_seed(42)
-            keys = [torch.randn(1, s, num_kv_heads, head_dim, dtype=torch.float32) for _ in range(num_layers)]
-            vals = [torch.randn(1, s, num_kv_heads, head_dim, dtype=torch.float32) for _ in range(num_layers)]
+            keys = [torch.randn(1, s, num_kv_heads, head_dim, dtype=torch.float16) for _ in range(num_layers)]
+            vals = [torch.randn(1, s, num_kv_heads, head_dim, dtype=torch.float16) for _ in range(num_layers)]
 
             # 1. Uncompressed FP16 baseline
             res_uncomp = benchmark_single_handoff(
@@ -324,20 +336,37 @@ def run_controlled_transfer_sweep(
             selected_mode = policy_decision.selected_mode
             res_policy = res_fp8 if selected_mode == CompressionMode.BLOCK_FP8 else res_uncomp
 
-            speedup_vs_uncomp = res_uncomp["p50_ms"] / max(0.001, res_fp8["p50_ms"])
+            u_proj_p50 = res_uncomp["projected_link_e2e_ms"]["p50"]
+            f_proj_p50 = res_fp8["projected_link_e2e_ms"]["p50"]
+            proj_speedup = u_proj_p50 / max(0.001, f_proj_p50)
+
+            u_meas_p50 = res_uncomp["measured_loopback_ms"]["p50"]
+            f_meas_p50 = res_fp8["measured_loopback_ms"]["p50"]
+            meas_loopback_speedup = u_meas_p50 / max(0.001, f_meas_p50)
+
             compression_ratio = res_uncomp["total_wire_bytes"] / max(1, res_fp8["total_wire_bytes"])
+            fp8_helps = proj_speedup > 1.0
+            empirical_winner = "block_fp8" if fp8_helps else "uncompressed_fp16"
+            policy_matches_empirical = (selected_mode.value == empirical_winner)
+
+            lat_oracle = min(u_proj_p50, f_proj_p50)
+            lat_policy = f_proj_p50 if selected_mode == CompressionMode.BLOCK_FP8 else u_proj_p50
+            policy_regret_pct = ((lat_policy - lat_oracle) / max(0.001, lat_oracle)) * 100.0
 
             point = {
                 "bandwidth": bw_name,
                 "bandwidth_bytes_per_sec": bw_bps,
                 "seq_len": s,
-                "uncompressed": res_uncomp,
-                "fp8": res_fp8,
+                "uncompressed_fp16": res_uncomp,
+                "block_fp8": res_fp8,
+                "wire_compression_ratio": round(compression_ratio, 2),
+                "projected_speedup_fp8_vs_fp16": round(proj_speedup, 2),
+                "measured_loopback_speedup": round(meas_loopback_speedup, 2),
+                "fp8_helps": fp8_helps,
+                "empirical_winner": empirical_winner,
                 "policy_selection": selected_mode.value,
-                "policy_result": res_policy,
-                "compression_ratio": round(compression_ratio, 2),
-                "speedup_fp8_vs_uncompressed": round(speedup_vs_uncomp, 2),
-                "fp8_helps": speedup_vs_uncomp > 1.0,
+                "policy_matches_empirical": policy_matches_empirical,
+                "policy_regret_pct": round(policy_regret_pct, 3),
             }
             results_data.append(point)
 
@@ -349,23 +378,25 @@ def run_controlled_transfer_sweep(
             "prefill_tp": prefill_tp,
             "decode_tp": decode_tp,
             "block_size_tokens": block_size_tokens,
+            "baseline_dtype": "float16",
         },
         "points": results_data,
     }
 
 
 def render_break_even_summary(sweep_data: Dict[str, Any]) -> None:
-    """Renders formatted tables and ASCII break-even charts."""
-    table = Table(title="Controlled Cache Transfer Benchmark: Uncompressed vs Block FP8 vs Adaptive Policy")
+    """Renders formatted tables and ASCII break-even charts with clear projection vs measurement labeling."""
+    table = Table(title="Controlled Cache Transfer Benchmark: Uncompressed FP16 vs Block FP8 vs Policy")
     table.add_column("Bandwidth", style="cyan")
-    table.add_column("Seq Len", justify="right")
-    table.add_column("FP16 Bytes", justify="right")
-    table.add_column("FP8 Bytes", justify="right")
+    table.add_column("Seq", justify="right")
+    table.add_column("FP16 Wire", justify="right")
+    table.add_column("FP8 Wire", justify="right")
     table.add_column("Ratio", justify="right", style="green")
-    table.add_column("FP16 P50", justify="right")
-    table.add_column("FP8 P50", justify="right")
-    table.add_column("Speedup", justify="right")
-    table.add_column("Policy Choice", justify="center")
+    table.add_column("Loopback Meas (FP16/FP8)", justify="right", style="dim")
+    table.add_column("Proj FP16", justify="right")
+    table.add_column("Proj FP8", justify="right")
+    table.add_column("Proj Speedup", justify="right")
+    table.add_column("Policy", justify="center")
     table.add_column("Outcome", justify="center")
 
     break_evens: Dict[str, Optional[int]] = {}
@@ -373,12 +404,17 @@ def render_break_even_summary(sweep_data: Dict[str, Any]) -> None:
     for pt in sweep_data["points"]:
         bw = pt["bandwidth"]
         s = pt["seq_len"]
-        u_bytes = pt["uncompressed"]["total_wire_bytes"]
-        f_bytes = pt["fp8"]["total_wire_bytes"]
-        ratio = f"{pt['compression_ratio']:.2f}x"
-        u_p50 = f"{pt['uncompressed']['p50_ms']:.2f} ms"
-        f_p50 = f"{pt['fp8']['p50_ms']:.2f} ms"
-        sp = f"{pt['speedup_fp8_vs_uncompressed']:.2f}x"
+        u_bytes = pt["uncompressed_fp16"]["total_wire_bytes"]
+        f_bytes = pt["block_fp8"]["total_wire_bytes"]
+        ratio = f"{pt['wire_compression_ratio']:.2f}x"
+
+        u_meas = pt["uncompressed_fp16"]["measured_loopback_ms"]["p50"]
+        f_meas = pt["block_fp8"]["measured_loopback_ms"]["p50"]
+        meas_str = f"{u_meas:.2f} / {f_meas:.2f} ms"
+
+        u_proj = f"{pt['uncompressed_fp16']['projected_link_e2e_ms']['p50']:.2f} ms"
+        f_proj = f"{pt['block_fp8']['projected_link_e2e_ms']['p50']:.2f} ms"
+        sp = f"{pt['projected_speedup_fp8_vs_fp16']:.2f}x"
         pol = pt["policy_selection"]
 
         if pt["fp8_helps"]:
@@ -390,22 +426,24 @@ def render_break_even_summary(sweep_data: Dict[str, Any]) -> None:
             if bw not in break_evens:
                 break_evens[bw] = None
 
-        table.add_row(bw, str(s), f"{u_bytes:,}", f"{f_bytes:,}", ratio, u_p50, f_p50, sp, pol, outcome)
+        table.add_row(bw, str(s), f"{u_bytes:,}", f"{f_bytes:,}", ratio, meas_str, u_proj, f_proj, sp, pol, outcome)
 
     console.print(table)
 
     # Print Break-Even Analysis Summary Panel
-    chart_lines = ["\n[bold yellow]Break-Even Sequence Lengths (S*) Where FP8 Compression Begins Helping:[/bold yellow]\n"]
+    chart_lines = ["\n[bold yellow]Projected Break-Even Sequence Lengths (S*) Where FP8 Accelerates Network Transfer:[/bold yellow]\n"]
     for bw, be in break_evens.items():
         if be is not None:
             chart_lines.append(f"  • {bw:<10}: S* = [bold green]{be} tokens[/bold green] (FP8 accelerates transfers for prompts >= {be} tokens)")
         else:
             chart_lines.append(f"  • {bw:<10}: [bold magenta]Never breaks even[/bold magenta] (interconnect too fast; CPU codec overhead dominates)")
 
-    chart_lines.append("\n[bold]Trade-off Summary:[/bold]")
-    chart_lines.append("  1. [red]Short Prompts (<= 16 tokens)[/red]: FP8 payload expands due to 16-token tile padding and JSON framing overhead.")
-    chart_lines.append("  2. [yellow]High-Speed Links (>= 100 Gbps)[/yellow]: Network transfer time is negligible; CPU quantization/dequantization cost is the bottleneck.")
-    chart_lines.append("  3. [green]Bandwidth-Constrained Links (1 - 10 Gbps)[/green]: FP8 delivers 1.6x - 1.8x byte reduction, reducing P50 latency by up to 45%.")
+    chart_lines.append("\n[bold]Trade-off & Measurement Methodology Breakdown:[/bold]")
+    chart_lines.append("  1. [bold white]Loopback Measurement[/bold white]: Wall-clock transfer over local TCP socket without link throttling.")
+    chart_lines.append("     Pure CPU IPC; uncompressed FP16 is always faster locally due to zero quantization overhead.")
+    chart_lines.append("  2. [bold white]Projected Network Latency[/bold white]: Modeled as Measured Codec Overhead + (Wire Bytes / Target Bandwidth).")
+    chart_lines.append("  3. [red]Short Prompts (<= 16 tokens)[/red]: FP8 wire bytes expand or offer negligible reduction due to tile padding and framing headers.")
+    chart_lines.append("  4. [green]Bandwidth-Constrained Links (1 Gbps)[/green]: FP8 delivers ~1.9x wire reduction, breaking even once wire transit savings outpace codec overhead.")
 
     console.print(Panel("\n".join(chart_lines), title="Adaptive Policy Break-Even Frontier"))
 

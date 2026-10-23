@@ -60,13 +60,15 @@ class AdaptiveCompressionPolicy:
 
     def __init__(
         self,
-        encoding_throughput_bytes_per_sec: float = 1.8e9,  # ~1.8 GB/s
-        decoding_throughput_bytes_per_sec: float = 3.5e9,  # ~3.5 GB/s
+        encoding_throughput_bytes_per_sec: float = 6.0e8,  # ~600 MB/s
+        decoding_throughput_bytes_per_sec: float = 1.0e9,  # ~1.0 GB/s
+        per_frame_dispatch_overhead_sec: float = 2.0e-5,   # ~20 us dispatch overhead per frame
         framing_overhead_bytes_per_frame: int = 150,       # Avg JSON header + framing per frame
         min_saving_threshold_ms: float = 0.05,             # Minimum 50us expected saving to justify lossy
     ):
         self.encoding_throughput = encoding_throughput_bytes_per_sec
         self.decoding_throughput = decoding_throughput_bytes_per_sec
+        self.per_frame_dispatch_overhead = per_frame_dispatch_overhead_sec
         self.framing_overhead_per_frame = framing_overhead_bytes_per_frame
         self.min_saving_threshold_ms = min_saving_threshold_ms
 
@@ -155,10 +157,12 @@ class AdaptiveCompressionPolicy:
         t_net_uncompressed = uncomp_bytes / link_bandwidth_bytes_per_sec
 
         # Compressed latency = Encoding time + Network transmission time + Decoding time
+        num_frames = num_layers * 2 * prefill_tp
+        dispatch_overhead_sec = num_frames * self.per_frame_dispatch_overhead
         raw_body_bytes = num_layers * 2 * seq_len * num_kv_heads * head_dim * 2
-        t_enc = raw_body_bytes / self.encoding_throughput
+        t_enc = (dispatch_overhead_sec * 0.6) + (raw_body_bytes / self.encoding_throughput)
         t_net_compressed = comp_bytes / link_bandwidth_bytes_per_sec
-        t_dec = raw_body_bytes / self.decoding_throughput
+        t_dec = (dispatch_overhead_sec * 0.4) + (raw_body_bytes / self.decoding_throughput)
 
         t_compressed_total = t_enc + t_net_compressed + t_dec
         net_saving_sec = t_net_uncompressed - t_compressed_total
