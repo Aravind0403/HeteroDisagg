@@ -52,3 +52,30 @@ def test_sglang_adapter():
 
     sglang_cmd = generate_sglang_command(plan, role="decode", port=30001)
     assert "--port 30001" in sglang_cmd
+
+
+def test_adapters_refuse_unresolved_memory_states():
+    """Engine adapters must refuse launch command generation when memory status is not feasible_fp16."""
+    _, inventory = load_cluster_inventory("h100_and_a10g.json")
+    model_70b = POPULAR_MODELS["llama-3-70b"]
+    plan = plan_cluster_placement(inventory, model_70b)
+    assert plan.memory_status == "requires_fp8_weight_quantization"
+
+    with pytest.raises(ValueError, match="refuses launch generation"):
+        generate_vllm_args(plan, role="prefill")
+
+    with pytest.raises(ValueError, match="refuses launch generation"):
+        generate_vllm_command(plan, role="decode")
+
+    with pytest.raises(ValueError, match="refuses launch generation"):
+        generate_vllm_config_dict(plan, role="prefill")
+
+    with pytest.raises(ValueError, match="refuses launch generation"):
+        generate_sglang_args(plan, role="prefill")
+
+    with pytest.raises(ValueError, match="refuses launch generation"):
+        generate_sglang_command(plan, role="decode")
+
+    with pytest.raises(ValueError, match="refuses launch generation"):
+        generate_sglang_config_dict(plan, role="decode")
+

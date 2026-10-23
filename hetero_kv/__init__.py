@@ -14,7 +14,7 @@ from hetero_kv.reshard import (
     package_payloads_from_prefill_rank,
     reassemble_decode_kv,
 )
-from hetero_kv.connector import HeteroKVConnector, TransferMetrics
+from hetero_kv.connector import HeteroKVConnector, TransferMetrics, calculate_uncompressed_kv_bytes
 
 __all__ = [
     "KVHeadSlice",
@@ -31,4 +31,5 @@ __all__ = [
     "reassemble_decode_kv",
     "HeteroKVConnector",
     "TransferMetrics",
+    "calculate_uncompressed_kv_bytes",
 ]

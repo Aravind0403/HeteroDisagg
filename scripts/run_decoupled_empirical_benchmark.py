@@ -26,7 +26,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 
-from hetero_kv.connector import HeteroKVConnector
+from hetero_kv.connector import HeteroKVConnector, calculate_uncompressed_kv_bytes
 
 console = Console()
 
@@ -74,7 +74,7 @@ def run_single_trial(
         batch_size, prompt_tokens, num_kv_heads, head_dim, dtype=torch.float16, device=device
     )
 
-    # 1. Warmup
+    # 1. Warmup (both Key and Value components)
     prefill_shards = {}
     for p in range(connector.prefill_tp):
         prefill_shards[p] = ground_truth[
@@ -82,7 +82,8 @@ def run_single_trial(
             p * (num_kv_heads // connector.prefill_tp) : (p + 1) * (num_kv_heads // connector.prefill_tp),
             :,
         ]
-    connector.transfer_layer_kv(0, prefill_shards)
+    connector.transfer_layer_kv(0, prefill_shards, request_id="warmup_k", kv_type="key")
+    connector.transfer_layer_kv(0, prefill_shards, request_id="warmup_v", kv_type="value")
     if device.type == "cuda":
         torch.cuda.synchronize()
 
@@ -94,17 +95,23 @@ def run_single_trial(
     total_wire_bytes = 0
     sample_payload_bytes = None
     for layer in range(num_layers):
-        _, payloads, _, _ = connector.transfer_layer_kv(layer, prefill_shards)
-        for p in payloads:
-            total_wire_bytes += p.payload_bytes
-            if sample_payload_bytes is None:
-                # Extract real serialized tensor payload slice for live socket transfer
-                if p.is_quantized:
-                    raw_q = p.data.quantized_data.view(torch.uint8).cpu().numpy().tobytes()
-                    raw_s = p.data.scale_factors.cpu().numpy().tobytes()
-                    sample_payload_bytes = (raw_q + raw_s)[: 1024 * 1024]  # 1MB real payload slice
-                else:
-                    sample_payload_bytes = p.data.cpu().numpy().tobytes()[: 1024 * 1024]  # 1MB real payload slice
+        for kv_comp in ("key", "value"):
+            _, payloads, _, _ = connector.transfer_layer_kv(
+                layer_idx=layer,
+                prefill_rank_shards=prefill_shards,
+                request_id=f"req_l{layer}_{kv_comp}",
+                kv_type=kv_comp,
+            )
+            for p in payloads:
+                total_wire_bytes += p.payload_bytes
+                if sample_payload_bytes is None:
+                    # Extract real serialized tensor payload slice for live socket transfer
+                    if p.is_quantized:
+                        raw_q = p.data.quantized_data.view(torch.uint8).cpu().numpy().tobytes()
+                        raw_s = p.data.scale_factors.cpu().numpy().tobytes()
+                        sample_payload_bytes = (raw_q + raw_s)[: 1024 * 1024]  # 1MB real payload slice
+                    else:
+                        sample_payload_bytes = p.data.cpu().numpy().tobytes()[: 1024 * 1024]  # 1MB real payload slice
     end_event.record()
     if device.type == "cuda":
         torch.cuda.synchronize()
@@ -143,6 +150,16 @@ def run_single_trial(
     tokens_per_hour = throughput_tok_s * 3600.0
     cost_per_1m = (hourly_cost_usd / tokens_per_hour) * 1_000_000.0
 
+    uncompressed_bytes = calculate_uncompressed_kv_bytes(
+        batch_size=batch_size,
+        seq_len=prompt_tokens,
+        num_kv_heads=num_kv_heads,
+        head_dim=head_dim,
+        num_layers=num_layers,
+        bytes_per_elem=2,
+        include_both_k_and_v=True,
+    )
+
     return {
         "gpu_compute_ms": round(gpu_compute_ms, 2),
         "wire_transfer_ms": round(measured_wire_ms if config_name != "vanilla_symmetric" else 0.0, 2),
@@ -150,6 +167,7 @@ def run_single_trial(
         "tpot_ms": round(tpot_ms, 2),
         "throughput_tok_s": round(throughput_tok_s, 1),
         "cost_per_1m_usd": round(cost_per_1m, 4),
+        "uncompressed_mb": round(uncompressed_bytes / (1024 ** 2), 2),
         "wire_mb": round(total_wire_mb, 2),
         "measured_bw_mb_s": round(measured_bw_mb_s, 3),
     }

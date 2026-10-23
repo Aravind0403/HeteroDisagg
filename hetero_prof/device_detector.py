@@ -132,10 +132,10 @@ def detect_device(device_index: int = 0, fallback_spec: str = "nvidia_rtx_4090.j
     for config_file in CONFIG_DIR.glob("*.json"):
         spec = load_spec_from_file(config_file)
         if spec.device_name.lower() in device_name.lower() or device_name.lower() in spec.device_name.lower():
-            # Update memory capacity with actual measured bytes
+            # Update memory capacity with actual measured bytes, preserve reference capabilities as detected
             spec_dict = spec.model_dump()
             spec_dict["memory_capacity_gb"] = total_memory_gb
-            spec_dict["provenance"] = "measured"
+            spec_dict["provenance"] = "detected"
             return AcceleratorSpec.model_validate(spec_dict)
 
     # If not in reference library, estimate from architecture & SM count

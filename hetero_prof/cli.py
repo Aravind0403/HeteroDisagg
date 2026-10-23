@@ -63,7 +63,7 @@ def inspect_device(spec: Optional[str], device: int):
         accel = _resolve_spec(spec, device)
     except Exception as e:
         console.print(f"[bold red]Error resolving accelerator spec:[/bold red] {e}")
-        return
+        raise click.ClickException(str(e))
 
     table = Table(title=f"Accelerator Specification: {accel.device_name}", header_style="bold magenta")
     table.add_column("Attribute", style="bold cyan", width=30)
@@ -111,7 +111,7 @@ def roofline_cmd(spec: Optional[str], device: int, dtype: str):
         point = evaluate_roofline(accel, precision=dtype)
     except Exception as e:
         console.print(f"[bold red]Error running roofline evaluation:[/bold red] {e}")
-        return
+        raise click.ClickException(str(e))
 
     table = Table(
         title=f"Roofline Analysis: {accel.device_name} ({dtype.upper()})",
@@ -138,7 +138,14 @@ def roofline_cmd(spec: Optional[str], device: int, dtype: str):
     tokens_table.add_column("Operational Intensity", justify="right", style="white")
     tokens_table.add_column("Execution Regime", style="bold")
 
-    bytes_per_elem = 1 if dtype.lower() == "fp8" else 2
+    dtype_lower = dtype.lower()
+    if dtype_lower == "fp8":
+        bytes_per_elem = 1
+    elif dtype_lower == "fp32":
+        bytes_per_elem = 4
+    else:
+        bytes_per_elem = 2
+
     for tokens in [128, 256, 512, 1024, 2048, 4096, 8192]:
         intensity = calculate_transformer_operational_intensity(
             tokens, hidden_size=4096, num_layers=32, bytes_per_elem=bytes_per_elem
@@ -172,7 +179,7 @@ def recommend_cmd(spec: Optional[str], device: int, dtype: str, hidden_size: int
         )
     except Exception as e:
         console.print(f"[bold red]Error calculating chunk recommendation:[/bold red] {e}")
-        return
+        raise click.ClickException(str(e))
 
     panel = Panel(
         f"[bold]Accelerator:[/bold] {rec.accelerator_name}\n"

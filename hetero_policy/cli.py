@@ -52,7 +52,7 @@ def plan_cmd(cluster: str, model: str):
         plan = plan_cluster_placement(inventory, model_meta, cluster_name=cluster_name)
     except Exception as e:
         console.print(f"[bold red]Error planning placement:[/bold red] {e}")
-        return
+        raise click.ClickException(str(e))
 
     console.print(
         Panel(
@@ -115,17 +115,21 @@ def generate_cmd(cluster: str, model: str, engine: str, output_dir: str):
         plan = plan_cluster_placement(inventory, model_meta, cluster_name=cluster_name)
     except Exception as e:
         console.print(f"[bold red]Error generating launch commands:[/bold red] {e}")
-        return
+        raise click.ClickException(str(e))
 
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    if engine.lower() == "vllm":
-        prefill_cmd = generate_vllm_command(plan, role="prefill", host="0.0.0.0", port=8000)
-        decode_cmd = generate_vllm_command(plan, role="decode", host="0.0.0.0", port=8001)
-    else:
-        prefill_cmd = generate_sglang_command(plan, role="prefill", host="0.0.0.0", port=30000)
-        decode_cmd = generate_sglang_command(plan, role="decode", host="0.0.0.0", port=30001)
+    try:
+        if engine.lower() == "vllm":
+            prefill_cmd = generate_vllm_command(plan, role="prefill", host="0.0.0.0", port=8000)
+            decode_cmd = generate_vllm_command(plan, role="decode", host="0.0.0.0", port=8001)
+        else:
+            prefill_cmd = generate_sglang_command(plan, role="prefill", host="0.0.0.0", port=30000)
+            decode_cmd = generate_sglang_command(plan, role="decode", host="0.0.0.0", port=30001)
+    except Exception as e:
+        console.print(f"[bold red]Error generating engine commands:[/bold red] {e}")
+        raise click.ClickException(str(e))
 
     prefill_script = out_path / f"launch_prefill_{engine.lower()}.sh"
     decode_script = out_path / f"launch_decode_{engine.lower()}.sh"

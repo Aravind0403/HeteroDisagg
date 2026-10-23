@@ -14,6 +14,18 @@ def generate_sglang_args(
     Generate command-line arguments for launching a native SGLang server instance
     customized for the target node's hardware role.
     """
+    if plan.memory_status == "requires_fp8_weight_quantization":
+        raise ValueError(
+            f"Cannot generate SGLang launch commands for {plan.model_name}: plan memory status is "
+            f"'{plan.memory_status}'. Unquantized weights exceed usable GPU memory capacity, "
+            f"and weight quantization or quantized checkpoint is unresolved. "
+            f"HeteroDisagg refuses launch generation for unsupported or unresolved memory states."
+        )
+    if plan.memory_status != "feasible_fp16":
+        raise ValueError(
+            f"Cannot generate SGLang launch commands: memory status '{plan.memory_status}' is unsupported."
+        )
+
     role_lower = role.lower()
     if role_lower == "prefill":
         assignment = plan.prefill_assignment
@@ -53,6 +65,18 @@ def generate_sglang_config_dict(
     role: str = "prefill",
 ) -> Dict[str, Any]:
     """Generate a structured JSON configuration dict for SGLang."""
+    if plan.memory_status == "requires_fp8_weight_quantization":
+        raise ValueError(
+            f"Cannot generate SGLang config for {plan.model_name}: plan memory status is "
+            f"'{plan.memory_status}'. Unquantized weights exceed usable GPU memory capacity, "
+            f"and weight quantization or quantized checkpoint is unresolved. "
+            f"HeteroDisagg refuses launch generation for unsupported or unresolved memory states."
+        )
+    if plan.memory_status != "feasible_fp16":
+        raise ValueError(
+            f"Cannot generate SGLang config: memory status '{plan.memory_status}' is unsupported."
+        )
+
     role_lower = role.lower()
     assignment = plan.prefill_assignment if role_lower == "prefill" else plan.decode_assignment
     tp = plan.prefill_tp if role_lower == "prefill" else plan.decode_tp

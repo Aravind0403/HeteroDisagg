@@ -17,7 +17,7 @@ from rich.table import Table
 from rich.panel import Panel
 import torch
 
-from hetero_kv.connector import HeteroKVConnector
+from hetero_kv.connector import HeteroKVConnector, calculate_uncompressed_kv_bytes
 
 console = Console()
 
@@ -75,19 +75,25 @@ def run_benchmark_trial(
 
     t_start = time.perf_counter()
 
-    # Prefill slice & transfer across layers
+    # Prefill slice & transfer across layers (both Key and Value components)
     total_wire_bytes = 0
     for layer in range(num_layers):
-        prefill_shards = {}
-        for p in range(connector.prefill_tp):
-            prefill_shards[p] = ground_truth[
-                ...,
-                p * (num_kv_heads // connector.prefill_tp) : (p + 1) * (num_kv_heads // connector.prefill_tp),
-                :,
-            ]
-        _, payloads, _, _ = connector.transfer_layer_kv(layer, prefill_shards)
-        for p in payloads:
-            total_wire_bytes += p.payload_bytes
+        for kv_comp in ("key", "value"):
+            prefill_shards = {}
+            for p in range(connector.prefill_tp):
+                prefill_shards[p] = ground_truth[
+                    ...,
+                    p * (num_kv_heads // connector.prefill_tp) : (p + 1) * (num_kv_heads // connector.prefill_tp),
+                    :,
+                ]
+            _, payloads, _, _ = connector.transfer_layer_kv(
+                layer_idx=layer,
+                prefill_rank_shards=prefill_shards,
+                request_id=f"req_l{layer}_{kv_comp}",
+                kv_type=kv_comp,
+            )
+            for p in payloads:
+                total_wire_bytes += p.payload_bytes
 
     t_transfer_done = time.perf_counter()
 
@@ -112,11 +118,22 @@ def run_benchmark_trial(
     tokens_per_hour = throughput_tok_s * 3600.0
     cost_per_1m = (hourly_cost_usd / tokens_per_hour) * 1_000_000.0
 
+    uncompressed_bytes = calculate_uncompressed_kv_bytes(
+        batch_size=batch_size,
+        seq_len=prompt_tokens,
+        num_kv_heads=num_kv_heads,
+        head_dim=head_dim,
+        num_layers=num_layers,
+        bytes_per_elem=2,
+        include_both_k_and_v=True,
+    )
+
     return {
         "ttft_ms": round(ttft_ms, 2),
         "tpot_ms": round(tpot_ms, 2),
         "throughput_tokens_s": round(throughput_tok_s, 1),
         "cost_per_1m_tokens_usd": round(cost_per_1m, 4),
+        "uncompressed_mb": round(uncompressed_bytes / (1024 ** 2), 2),
         "wire_mb": round(total_wire_bytes / (1024 ** 2), 2),
     }
 

@@ -121,25 +121,35 @@ def plan_cluster_placement(
     if prefill_tp == 0 or decode_tp == 0:
         raise ValueError("Cannot form a valid plan: computed TP degree is 0.")
 
-    # Memory feasibility validation: weights memory check
+    # Memory feasibility validation: weights + workspace/cache headroom check
+    # Engines reserve memory (e.g. vLLM default gpu_memory_utilization = 0.90)
+    # Weights cannot consume the entire nominal GPU capacity, leaving no allowance for cache or workspace.
+    DEFAULT_GPU_MEMORY_UTILIZATION = 0.90
+    MIN_WORKSPACE_CACHE_GB = 2.0  # Minimum allowance for KV cache, workspace, and CUDA runtime context
+
     min_weights_fp16_gb = model.parameter_count_billions * 2.0
     min_weights_fp8_gb = model.parameter_count_billions * 1.0
 
     prefill_vram_gb = prefill_item.spec.memory_capacity_gb * prefill_tp
     decode_vram_gb = decode_item.spec.memory_capacity_gb * decode_tp
 
-    if prefill_vram_gb < min_weights_fp8_gb:
+    usable_prefill_vram_gb = prefill_vram_gb * DEFAULT_GPU_MEMORY_UTILIZATION
+    usable_decode_vram_gb = decode_vram_gb * DEFAULT_GPU_MEMORY_UTILIZATION
+
+    if usable_prefill_vram_gb < (min_weights_fp8_gb + MIN_WORKSPACE_CACHE_GB):
         raise ValueError(
-            f"Infeasible plan: Prefill tier ({prefill_tp}x {prefill_item.spec.device_name}, {prefill_vram_gb:.1f} GB total VRAM) "
-            f"cannot fit {model.model_name} (~{min_weights_fp8_gb:.1f} GB minimum even under FP8 quantization)."
+            f"Infeasible plan: Prefill tier ({prefill_tp}x {prefill_item.spec.device_name}, {prefill_vram_gb:.1f} GB total, "
+            f"{usable_prefill_vram_gb:.1f} GB usable at {DEFAULT_GPU_MEMORY_UTILIZATION*100:.0f}% utilization) cannot fit "
+            f"{model.model_name} (~{min_weights_fp8_gb:.1f} GB FP8 weights + {MIN_WORKSPACE_CACHE_GB:.1f} GB cache/workspace allowance)."
         )
-    if decode_vram_gb < min_weights_fp8_gb:
+    if usable_decode_vram_gb < (min_weights_fp8_gb + MIN_WORKSPACE_CACHE_GB):
         raise ValueError(
-            f"Infeasible plan: Decode tier ({decode_tp}x {decode_item.spec.device_name}, {decode_vram_gb:.1f} GB total VRAM) "
-            f"cannot fit {model.model_name} (~{min_weights_fp8_gb:.1f} GB minimum even under FP8 quantization)."
+            f"Infeasible plan: Decode tier ({decode_tp}x {decode_item.spec.device_name}, {decode_vram_gb:.1f} GB total, "
+            f"{usable_decode_vram_gb:.1f} GB usable at {DEFAULT_GPU_MEMORY_UTILIZATION*100:.0f}% utilization) cannot fit "
+            f"{model.model_name} (~{min_weights_fp8_gb:.1f} GB FP8 weights + {MIN_WORKSPACE_CACHE_GB:.1f} GB cache/workspace allowance)."
         )
 
-    if prefill_vram_gb < min_weights_fp16_gb or decode_vram_gb < min_weights_fp16_gb:
+    if usable_prefill_vram_gb < (min_weights_fp16_gb + MIN_WORKSPACE_CACHE_GB) or usable_decode_vram_gb < (min_weights_fp16_gb + MIN_WORKSPACE_CACHE_GB):
         memory_status = "requires_fp8_weight_quantization"
     else:
         memory_status = "feasible_fp16"

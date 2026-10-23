@@ -18,6 +18,23 @@ from hetero_kv.reshard import (
 from hetero_kv.quant.fp8_block import compute_cosine_similarity
 
 
+def calculate_uncompressed_kv_bytes(
+    batch_size: int,
+    seq_len: int,
+    num_kv_heads: int,
+    head_dim: int,
+    num_layers: int,
+    bytes_per_elem: int = 2,
+    include_both_k_and_v: bool = True,
+) -> int:
+    """
+    Standardized full-cache volume accounting across all entry points.
+    A full KV cache consists of both Key and Value tensors across all transformer layers.
+    """
+    kv_factor = 2 if include_both_k_and_v else 1
+    return batch_size * seq_len * num_kv_heads * head_dim * bytes_per_elem * num_layers * kv_factor
+
+
 @dataclass
 class TransferMetrics:
     """Performance telemetry for KV cache transfer across mismatched ranks."""
@@ -66,11 +83,13 @@ class HeteroKVConnector:
         self,
         layer_idx: int,
         prefill_rank_shards: Dict[int, torch.Tensor],
+        request_id: Optional[str] = None,
+        kv_type: Optional[str] = None,
     ) -> Tuple[Dict[int, torch.Tensor], List[KVPayload], float, float]:
         """
         Execute asymmetric transfer for a single layer:
-        1. Package and optionally quantize payloads on the prefill side.
-        2. Route and reassemble on the decode side.
+        1. Package and optionally quantize payloads on the prefill side with request & K/V metadata.
+        2. Route, validate metadata on receipt, and reassemble on the decode side.
         
         Returns:
             decode_rank_tensors: Dict mapping decode_rank to its reassembled KV tensor.
@@ -93,6 +112,8 @@ class HeteroKVConnector:
                 plan=self.plan,
                 enable_fp8=self.enable_fp8,
                 block_size_tokens=self.block_size_tokens,
+                request_id=request_id,
+                kv_type=kv_type,
             )
             all_payloads.extend(rank_payloads)
 
@@ -101,7 +122,7 @@ class HeteroKVConnector:
         t1 = time.perf_counter()
         quant_ms = (t1 - t0) * 1000.0
 
-        # Decode side: reassemble tensors
+        # Decode side: reassemble tensors, strictly verifying metadata on receipt
         t2 = time.perf_counter()
         decode_shards: Dict[int, torch.Tensor] = {}
         for d_rank in range(self.decode_tp):
@@ -109,6 +130,8 @@ class HeteroKVConnector:
                 received_payloads=all_payloads,
                 decode_rank=d_rank,
                 plan=self.plan,
+                expected_request_id=request_id,
+                expected_kv_type=kv_type,
             )
             decode_shards[d_rank] = reassembled
 
@@ -159,16 +182,18 @@ class HeteroKVConnector:
                         ground_truth, prefill_rank=p_rank, plan=self.plan
                     )
 
-                # Transfer layer component
+                req_id = f"req_l{layer}_{kv_comp}"
+                # Transfer layer component with metadata supplied and verified on receipt
                 decode_shards, payloads, q_ms, dq_ms = self.transfer_layer_kv(
                     layer_idx=layer,
                     prefill_rank_shards=prefill_shards,
+                    request_id=req_id,
+                    kv_type=kv_comp,
                 )
                 total_quant_ms += q_ms
                 total_dequant_ms += dq_ms
 
                 for p in payloads:
-                    p.kv_type = kv_comp
                     total_wire_bytes += p.payload_bytes
 
                 # Glue decode shards together to check cosine similarity against ground truth

@@ -112,6 +112,8 @@ def reassemble_decode_kv(
     received_payloads: List[KVPayload],
     decode_rank: int,
     plan: KVPartitionPlan,
+    expected_request_id: Optional[str] = None,
+    expected_kv_type: Optional[str] = None,
 ) -> torch.Tensor:
     """
     Reassemble incoming payloads from designated prefill ranks into the contiguous
@@ -130,7 +132,7 @@ def reassemble_decode_kv(
     # Validate layer, request, and kv_type consistency across all payloads
     expected_layer = filtered_payloads[0].layer_idx
     expected_request = filtered_payloads[0].request_id
-    expected_kv_type = filtered_payloads[0].kv_type
+    expected_kv_type_local = filtered_payloads[0].kv_type
 
     for p in filtered_payloads:
         if p.layer_idx != expected_layer:
@@ -143,9 +145,19 @@ def reassemble_decode_kv(
                 f"Inconsistent request_id in payloads for decode_rank {decode_rank}: "
                 f"expected {expected_request}, got {p.request_id}"
             )
-        if p.kv_type != expected_kv_type:
+        if p.kv_type != expected_kv_type_local:
             raise ValueError(
                 f"Inconsistent kv_type in payloads for decode_rank {decode_rank}: "
+                f"expected {expected_kv_type_local}, got {p.kv_type}"
+            )
+        if expected_request_id is not None and p.request_id != expected_request_id:
+            raise ValueError(
+                f"Mismatched request_id on receipt for decode_rank {decode_rank}: "
+                f"expected {expected_request_id}, got {p.request_id}"
+            )
+        if expected_kv_type is not None and p.kv_type != expected_kv_type:
+            raise ValueError(
+                f"Mismatched kv_type on receipt for decode_rank {decode_rank}: "
                 f"expected {expected_kv_type}, got {p.kv_type}"
             )
 
