@@ -17,7 +17,7 @@ from hetero_kv.reshard import (
 from hetero_kv.connector import HeteroKVConnector, TransferMetrics, calculate_uncompressed_kv_bytes
 from hetero_kv.policy import AdaptiveCompressionPolicy, CompressionMode, PolicyEvaluationResult
 
-from hetero_kv.lifecycle import safe_cleanup_processes, verify_pid_dead
+from hetero_kv.lifecycle import safe_cleanup_processes, verify_pid_dead, validate_cleanup_report
 
 __all__ = [
     "KVHeadSlice",

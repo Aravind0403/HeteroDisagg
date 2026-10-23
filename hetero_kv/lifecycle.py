@@ -106,3 +106,18 @@ def safe_cleanup_processes(
         "deleted_temp_files": deleted_files,
         "leaked_temp_files": leaked_files,
     }
+
+
+def validate_cleanup_report(report: Any) -> bool:
+    """Validates that a process/resource cleanup report exists, is non-empty, and confirms complete cleanup."""
+    if not isinstance(report, dict) or not report:
+        return False
+    if report.get("all_child_processes_reaped") is not True:
+        return False
+    if report.get("temporary_files_deleted") is not True:
+        return False
+    if report.get("surviving_pids") != []:
+        return False
+    if report.get("leaked_temp_files") != []:
+        return False
+    return True

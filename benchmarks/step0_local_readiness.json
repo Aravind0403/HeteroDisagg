@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-23T17:10:34Z",
+  "timestamp": "2026-10-23T17:55:59Z",
   "environment": {
     "os": "Darwin",
     "os_release": "25.5.0",
@@ -15,10 +15,10 @@
   "wire_codec_validation": {
     "encoding_used": "float8_e4m3fn",
     "is_emulated_fallback": false,
-    "encode_duration_ms": 1.2375839869491756,
-    "decode_duration_ms": 0.08362502558156848,
-    "max_abs_error": 0.16145682334899902,
-    "cosine_similarity": 0.9996465444564819,
+    "encode_duration_ms": 0.4650420160032809,
+    "decode_duration_ms": 0.08258299203589559,
+    "max_abs_error": 0.14238715171813965,
+    "cosine_similarity": 0.9996495246887207,
     "note": "Wire codec tests scaling, packing, socket streaming, and reconstruction. It does NOT establish FP8 Tensor Core GEMM acceleration (e.g. Ampere lacks native FP8 compute).",
     "acceleration_note": "Identifies wire encoding used. On this CPU/host run, it does NOT demonstrate native GPU FP8 acceleration."
   },
@@ -27,20 +27,20 @@
     "all_tokens_match": true,
     "max_abs_logit_divergence": 0.0,
     "timing_decomposition": {
-      "time_to_first_token_ready_ms": 756.1269589932635,
-      "transfer_and_reconstruction_latency_ms": 13.165124983061105,
-      "receiver_reconstruction_duration_ms": 11.115125031210482,
-      "first_decode_step_latency_ms": 744.9337499565445,
-      "true_inter_token_handoff_gap_ms": 758.1440409994684,
+      "time_to_first_token_ready_ms": 790.4145829961635,
+      "transfer_and_reconstruction_latency_ms": 14.230834029149264,
+      "receiver_reconstruction_duration_ms": 11.17033400805667,
+      "first_decode_step_latency_ms": 865.6165419961326,
+      "true_inter_token_handoff_gap_ms": 879.9154590233229,
       "subsequent_step_latencies_ms": [
-        71.17375003872439
+        71.46537501830608
       ],
-      "median_subsequent_latency_ms": 71.17375003872439,
+      "median_subsequent_latency_ms": 71.46537501830608,
       "raw_event_timestamps": {
-        "t_producer_token_ready": 514855.836451625,
-        "t_sender_wire_start": 514855.836455958,
-        "t_consumer_cache_ready": 514855.849621083,
-        "t_consumer_token_ready": 514856.594595666
+        "t_producer_token_ready": 517579.130187416,
+        "t_sender_wire_start": 517579.130195166,
+        "t_consumer_cache_ready": 517579.144426,
+        "t_consumer_token_ready": 517580.010102875
       }
     },
     "wire_accounting": {
@@ -67,20 +67,20 @@
     "all_tokens_match": true,
     "mean_cosine_similarity": 0.999464,
     "timing_decomposition": {
-      "time_to_first_token_ready_ms": 540.8792909584008,
-      "transfer_and_reconstruction_latency_ms": 17.252958030439913,
-      "receiver_reconstruction_duration_ms": 16.23337500495836,
-      "first_decode_step_latency_ms": 577.2453330573626,
-      "true_inter_token_handoff_gap_ms": 594.5473750471137,
+      "time_to_first_token_ready_ms": 617.1382499742322,
+      "transfer_and_reconstruction_latency_ms": 17.34575000591576,
+      "receiver_reconstruction_duration_ms": 15.962375036906451,
+      "first_decode_step_latency_ms": 636.3944580079988,
+      "true_inter_token_handoff_gap_ms": 653.761041990947,
       "subsequent_step_latencies_ms": [
-        74.7909169876948
+        70.59183396631852
       ],
-      "median_subsequent_latency_ms": 74.7909169876948,
+      "median_subsequent_latency_ms": 70.59183396631852,
       "raw_event_timestamps": {
-        "t_producer_token_ready": 514877.593471416,
-        "t_sender_wire_start": 514877.5934725,
-        "t_consumer_cache_ready": 514877.610725458,
-        "t_consumer_token_ready": 514878.188018791
+        "t_producer_token_ready": 517600.824327791,
+        "t_sender_wire_start": 517600.824331458,
+        "t_consumer_cache_ready": 517600.841677208,
+        "t_consumer_token_ready": 517601.478088833
       }
     },
     "wire_accounting": {
@@ -111,12 +111,12 @@
       "all_child_processes_reaped": true,
       "temporary_files_deleted": true,
       "reaped_pids": [
-        53638,
-        53635
+        55475,
+        55470
       ],
       "surviving_pids": [],
       "deleted_temp_files": [
-        "/var/folders/6f/q3g_tlzn4vn524wj5thmnt7w0000gn/T/hkv_logits_53632_bc6a521a25fe49fc89fa18ed623362da.pt"
+        "/var/folders/6f/q3g_tlzn4vn524wj5thmnt7w0000gn/T/hkv_logits_55465_54fa84ec651944e4a85463931cd6379b.pt"
       ],
       "leaked_temp_files": []
     },
@@ -124,12 +124,12 @@
       "all_child_processes_reaped": true,
       "temporary_files_deleted": true,
       "reaped_pids": [
-        53658,
-        53651
+        55490,
+        55484
       ],
       "surviving_pids": [],
       "deleted_temp_files": [
-        "/var/folders/6f/q3g_tlzn4vn524wj5thmnt7w0000gn/T/hkv_logits_53632_0ace9224216347999185de104c7c13fc.pt"
+        "/var/folders/6f/q3g_tlzn4vn524wj5thmnt7w0000gn/T/hkv_logits_55465_0aa91b43febd4a78a245e98ad4baca27.pt"
       ],
       "leaked_temp_files": []
     }

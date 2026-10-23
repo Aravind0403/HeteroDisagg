@@ -59,7 +59,7 @@ from rich.table import Table
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.cache_utils import DynamicCache
 
-from hetero_kv.lifecycle import safe_cleanup_processes, verify_pid_dead
+from hetero_kv.lifecycle import safe_cleanup_processes, verify_pid_dead, validate_cleanup_report
 from hetero_kv.layout import KVPartitionPlan
 from hetero_kv.reshard import slice_kv_for_prefill_rank
 from hetero_kv.quant.fp8_block import (
@@ -91,6 +91,26 @@ def inspect_two_gpu_system(prefill_dev_str: str, decode_dev_str: str) -> Dict[st
     p_dev = torch.device(prefill_dev_str)
     d_dev = torch.device(decode_dev_str)
 
+    # Resolve CUDA devices to explicit integer device indices
+    p_idx = None
+    d_idx = None
+    if p_dev.type == "cuda":
+        p_idx = p_dev.index if p_dev.index is not None else (torch.cuda.current_device() if has_cuda else 0)
+    if d_dev.type == "cuda":
+        d_idx = d_dev.index if d_dev.index is not None else (torch.cuda.current_device() if has_cuda else 0)
+
+    is_two_physical_cuda = bool(
+        has_cuda
+        and cuda_count >= 2
+        and p_dev.type == "cuda"
+        and d_dev.type == "cuda"
+        and p_idx is not None
+        and d_idx is not None
+        and p_idx != d_idx
+        and 0 <= p_idx < cuda_count
+        and 0 <= d_idx < cuda_count
+    )
+
     telemetry: Dict[str, Any] = {
         "os": platform.system(),
         "arch": platform.machine(),
@@ -102,12 +122,9 @@ def inspect_two_gpu_system(prefill_dev_str: str, decode_dev_str: str) -> Dict[st
         "cuda_device_count": cuda_count,
         "prefill_device": prefill_dev_str,
         "decode_device": decode_dev_str,
-        "is_two_physical_cuda_gpus": (
-            p_dev.type == "cuda"
-            and d_dev.type == "cuda"
-            and p_dev.index != d_dev.index
-            and cuda_count >= 2
-        ),
+        "resolved_prefill_device_index": p_idx,
+        "resolved_decode_device_index": d_idx,
+        "is_two_physical_cuda_gpus": is_two_physical_cuda,
         "transport_architecture": "Localhost TCP Socket with CPU Staging",
         "transport_notes": (
             "Independent OS processes communicate over 127.0.0.1 TCP socket with host-memory staging. "
@@ -116,10 +133,7 @@ def inspect_two_gpu_system(prefill_dev_str: str, decode_dev_str: str) -> Dict[st
         ),
     }
 
-    if has_cuda and cuda_count >= 2:
-        p_idx = p_dev.index if p_dev.index is not None else 0
-        d_idx = d_dev.index if d_dev.index is not None else 1
-
+    if is_two_physical_cuda and p_idx is not None and d_idx is not None:
         p_props = torch.cuda.get_device_properties(p_idx)
         d_props = torch.cuda.get_device_properties(d_idx)
 
@@ -830,12 +844,12 @@ def run_step2_suite(
         "fp8_cosine_is_finite": bool(math.isfinite(cos_sim_fp8)),
         "null_cache_negative_control_diverged": bool(null_diverges),
         "child_processes_reaped": bool(
-            uncomp_cleanup.get("all_child_processes_reaped", True)
-            and fp8_cleanup.get("all_child_processes_reaped", True)
+            validate_cleanup_report(uncomp_cleanup)
+            and validate_cleanup_report(fp8_cleanup)
         ),
         "temporary_files_deleted": bool(
-            uncomp_cleanup.get("temporary_files_deleted", True)
-            and fp8_cleanup.get("temporary_files_deleted", True)
+            validate_cleanup_report(uncomp_cleanup)
+            and validate_cleanup_report(fp8_cleanup)
         ),
     }
 
@@ -1080,11 +1094,25 @@ def main(
     console.print(summary_panel)
     console.print(f"[dim]Artifact exported to {output}[/dim]")
 
-    if not two_gpu_milestone_passed and not allow_emulation:
+    if two_gpu_milestone_passed:
         console.print(Panel(
-            "[bold red]Step 2 Physical Two-GPU Milestone FAILED.[/bold red]\n"
-            "Physical execution requires distinct CUDA devices and passing all tolerances.",
-            border_style="red"
+            f"[bold green]Step 2 Physical Two-GPU Milestone Complete![/bold green]\n"
+            f"Physical CUDA hardware confirmed, tolerances verified.\n"
+            f"Artifact saved to [bold cyan]{output}[/bold cyan]",
+            border_style="green",
+        ))
+    elif allow_emulation and emulation_pipeline_passed:
+        console.print(Panel(
+            f"[bold yellow]Step 2 Pipeline Verified (Emulation Mode)[/bold yellow]\n"
+            f"Artifact saved to [bold cyan]{output}[/bold cyan]\n"
+            f"Note: Running in emulation mode. Physical milestone requires distinct CUDA devices.",
+            border_style="yellow",
+        ))
+    else:
+        console.print(Panel(
+            "[bold red]Step 2 Handoff Benchmark FAILED.[/bold red]\n"
+            "Execution failed required correctness checks or physical milestone requirements.",
+            border_style="red",
         ))
         sys.exit(1)
 

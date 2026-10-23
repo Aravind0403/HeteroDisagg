@@ -33,6 +33,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from hetero_kv.quant.fp8_block import quantize_kv_block_fp8, dequantize_kv_block_fp8
+from hetero_kv.lifecycle import validate_cleanup_report
 from scripts.verify_socket_process_cache_handoff import run_socket_cache_handoff_experiment
 
 console = Console()
@@ -165,10 +166,12 @@ def run_step0_checks(output_path: str = "benchmarks/step0_local_readiness.json")
         and (fp8_res.get("mean_cosine_similarity", 0.0) >= 0.99)
         and math.isfinite(fp8_res.get("mean_cosine_similarity", float("nan")))
     )
+    uncomp_cleanup_ok = validate_cleanup_report(uncomp_res.get("cleanup_observed"))
+    fp8_cleanup_ok = validate_cleanup_report(fp8_res.get("cleanup_observed"))
     cleanup_passed = bool(
-        failure_cleanup_verified
-        and uncomp_res.get("cleanup_observed", {}).get("all_child_processes_reaped", True)
-        and fp8_res.get("cleanup_observed", {}).get("all_child_processes_reaped", True)
+        failure_cleanup_verified is True
+        and uncomp_cleanup_ok
+        and fp8_cleanup_ok
     )
 
     step0_ready_for_gpu_rental = bool(uncomp_passed and fp8_passed and cleanup_passed)

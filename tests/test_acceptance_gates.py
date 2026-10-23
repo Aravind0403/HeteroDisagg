@@ -220,3 +220,181 @@ def test_process_lifecycle_cleanup_kills_and_reaps():
     assert report["temporary_files_deleted"] is True
     assert verify_pid_dead(pid) is True
     assert not os.path.exists(temp_path)
+
+
+def test_step2_allow_emulation_fails_closed_when_emulation_fails():
+    """
+    --allow-emulation MUST return success ONLY when emulation correctness passes.
+    If emulation correctness fails (e.g. 99.0 logit error or token mismatch),
+    the CLI MUST exit with code 1, even with --allow-emulation specified.
+    """
+    from click.testing import CliRunner
+    from scripts.run_step2_two_gpu_handoff import main as step2_main
+
+    runner = CliRunner()
+    with tempfile.TemporaryDirectory() as td:
+        out_json = os.path.join(td, "step2_emul_fail.json")
+
+        # Mock run_step2_suite to simulate emulation pipeline failure (emulation_pipeline_passed=False)
+        def mock_suite(*args, **kwargs):
+            return {
+                "completion_criterion": {
+                    "two_gpu_milestone_passed": False,
+                    "emulation_pipeline_passed": False,
+                    "discrete_checks": {
+                        "distinct_physical_cuda_gpus": False,
+                        "uncompressed_tokens_match": False,
+                        "uncompressed_logit_error_within_tolerance": False,
+                        "uncompressed_error_is_finite": True,
+                        "fp8_tokens_match": False,
+                        "fp8_cosine_similarity_within_threshold": False,
+                        "fp8_cosine_is_finite": True,
+                        "null_cache_negative_control_diverged": True,
+                        "child_processes_reaped": True,
+                        "temporary_files_deleted": True,
+                    },
+                },
+                "hardware_telemetry": {"is_two_physical_cuda_gpus": False},
+                "uncompressed_exact": {
+                    "prefill_device": "cpu",
+                    "decode_device": "cpu",
+                    "encoding_used": "float32",
+                    "tokens_match": False,
+                    "max_abs_logit_error": 99.0,
+                    "cosine_similarity": 0.1,
+                    "wire_accounting": {"body_bytes": 100, "total_wire_bytes": 200},
+                    "generated_text": "fail",
+                    "timing_decomposition": {
+                        "time_to_first_token_ready_ms": 10.0,
+                        "transfer_and_reconstruction_latency_ms": 5.0,
+                        "receiver_reconstruction_duration_ms": 2.0,
+                        "true_inter_token_handoff_gap_ms": 15.0,
+                        "median_subsequent_latency_ms": 3.0,
+                    },
+                },
+                "fp8_wire_codec": {
+                    "encoding_used": "float8_e4m3fn",
+                    "is_emulated_fallback": True,
+                    "tokens_match": False,
+                    "max_abs_logit_error": 99.0,
+                    "cosine_similarity": 0.1,
+                    "wire_accounting": {"body_bytes": 100, "total_wire_bytes": 200},
+                    "generated_text": "fail",
+                    "timing_decomposition": {
+                        "time_to_first_token_ready_ms": 10.0,
+                        "transfer_and_reconstruction_latency_ms": 5.0,
+                        "receiver_reconstruction_duration_ms": 2.0,
+                        "true_inter_token_handoff_gap_ms": 15.0,
+                        "median_subsequent_latency_ms": 3.0,
+                    },
+                },
+                "empirical_negative_control": {
+                    "diverged_from_baseline": True,
+                    "generated_text": "null",
+                },
+                "expansion_breakdown": {
+                    "tensor_body_expansion_pct": 0.0,
+                    "application_wire_expansion_pct": 0.0,
+                },
+                "tolerances": {
+                    "uncompressed_max_abs_logit_tolerance": 1e-5,
+                    "fp8_cosine_similarity_threshold": 0.999,
+                },
+            }
+
+        with patch("scripts.run_step2_two_gpu_handoff.run_step2_suite", side_effect=mock_suite):
+            result = runner.invoke(step2_main, ["--allow-emulation", "--output", out_json])
+            assert result.exit_code == 1, f"Expected exit code 1 when emulation fails, got {result.exit_code}. Output: {result.output}"
+
+
+def test_step2_device_alias_resolution_and_validation():
+    """
+    CUDA devices must be resolved to explicit integer indices before checking that they differ.
+    Aliases like 'cuda' and 'cuda:0' (or identical explicit indices 'cuda:1' and 'cuda:1')
+    must resolve to the same device index and reject is_two_physical_cuda_gpus.
+    """
+    # Simulate a 2-GPU CUDA environment
+    with patch("torch.cuda.is_available", return_value=True), \
+         patch("torch.cuda.device_count", return_value=2), \
+         patch("torch.cuda.current_device", return_value=0):
+
+        # Case A: Alias 'cuda' and 'cuda:0' (both point to GPU 0)
+        telemetry_alias = inspect_two_gpu_system("cuda", "cuda:0")
+        assert telemetry_alias["resolved_prefill_device_index"] == 0
+        assert telemetry_alias["resolved_decode_device_index"] == 0
+        assert telemetry_alias["is_two_physical_cuda_gpus"] is False, (
+            "Alias 'cuda' and 'cuda:0' both resolve to GPU 0 and must not be marked as two distinct GPUs!"
+        )
+
+        # Case B: Duplicate explicit indices 'cuda:1' and 'cuda:1'
+        telemetry_dup = inspect_two_gpu_system("cuda:1", "cuda:1")
+        assert telemetry_dup["resolved_prefill_device_index"] == 1
+        assert telemetry_dup["resolved_decode_device_index"] == 1
+        assert telemetry_dup["is_two_physical_cuda_gpus"] is False
+
+        # Case C: Valid distinct physical GPUs 'cuda:0' and 'cuda:1'
+        with patch("torch.cuda.get_device_properties") as mock_props, \
+             patch("torch.cuda.can_device_access_peer", return_value=True):
+            mock_prop = MagicMock()
+            mock_prop.name = "NVIDIA RTX 4070 SUPER"
+            mock_prop.total_memory = 12 * (1024**3)
+            mock_prop.major = 8
+            mock_prop.minor = 9
+            mock_props.return_value = mock_prop
+
+            telemetry_distinct = inspect_two_gpu_system("cuda:0", "cuda:1")
+            assert telemetry_distinct["resolved_prefill_device_index"] == 0
+            assert telemetry_distinct["resolved_decode_device_index"] == 1
+            assert telemetry_distinct["is_two_physical_cuda_gpus"] is True
+
+
+def test_step0_rejects_missing_or_failed_cleanup_observations():
+    """
+    Step 0 readiness MUST reject missing, empty, or failed cleanup observations.
+    """
+    from hetero_kv.lifecycle import validate_cleanup_report
+
+    # Unit assertions on validate_cleanup_report
+    assert validate_cleanup_report(None) is False
+    assert validate_cleanup_report({}) is False
+    assert validate_cleanup_report({"all_child_processes_reaped": True}) is False
+    assert validate_cleanup_report({
+        "all_child_processes_reaped": True,
+        "temporary_files_deleted": False,
+        "surviving_pids": [],
+        "leaked_temp_files": [],
+    }) is False
+    assert validate_cleanup_report({
+        "all_child_processes_reaped": True,
+        "temporary_files_deleted": True,
+        "surviving_pids": [12345],
+        "leaked_temp_files": [],
+    }) is False
+    assert validate_cleanup_report({
+        "all_child_processes_reaped": True,
+        "temporary_files_deleted": True,
+        "surviving_pids": [],
+        "leaked_temp_files": ["/tmp/leaked.pt"],
+    }) is False
+    assert validate_cleanup_report({
+        "all_child_processes_reaped": True,
+        "temporary_files_deleted": True,
+        "surviving_pids": [],
+        "leaked_temp_files": [],
+    }) is True
+
+    # End-to-end Step 0 test: inject missing cleanup_observed into uncompressed run
+    with tempfile.TemporaryDirectory() as td:
+        out_json = os.path.join(td, "step0_cleanup_fail.json")
+
+        real_fn = run_socket_cache_handoff_experiment
+        def mock_handoff_missing_cleanup(*args, **kwargs):
+            res = real_fn(*args, **kwargs)
+            # Remove cleanup_observed
+            res.pop("cleanup_observed", None)
+            return res
+
+        with patch("scripts.run_local_step0_checks.run_socket_cache_handoff_experiment", side_effect=mock_handoff_missing_cleanup):
+            readiness = run_step0_checks(output_path=out_json)
+            assert readiness["step0_ready_for_gpu_rental"] is False
+            assert readiness["cleanup_status"]["all_child_processes_reaped"] is False
