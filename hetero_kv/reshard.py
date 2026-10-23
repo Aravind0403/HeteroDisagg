@@ -25,6 +25,8 @@ class KVPayload:
     end_head_idx: int
     data: Union[torch.Tensor, FP8BlockPayload]
     is_quantized: bool
+    request_id: Optional[str] = None
+    kv_type: Optional[str] = None  # e.g., 'key' or 'value'
 
     @property
     def num_heads(self) -> int:
@@ -62,6 +64,8 @@ def package_payloads_from_prefill_rank(
     plan: KVPartitionPlan,
     enable_fp8: bool = True,
     block_size_tokens: int = 16,
+    request_id: Optional[str] = None,
+    kv_type: Optional[str] = None,
 ) -> List[KVPayload]:
     """
     Given the KV cache slice held by a prefill rank, carve it into targeted
@@ -96,6 +100,8 @@ def package_payloads_from_prefill_rank(
                 end_head_idx=route.head_slice.end_head_idx,
                 data=payload_data,
                 is_quantized=is_quantized,
+                request_id=request_id,
+                kv_type=kv_type,
             )
         )
 
@@ -110,6 +116,7 @@ def reassemble_decode_kv(
     """
     Reassemble incoming payloads from designated prefill ranks into the contiguous
     KV cache layout expected by the target decode rank.
+    Validates layer consistency, request identity, source-rank ownership, and tensor shapes.
     """
     if decode_rank not in plan.decode_head_slices:
         raise ValueError(f"decode_rank {decode_rank} is not in partition plan (decode_tp={plan.decode_tp})")
@@ -119,6 +126,48 @@ def reassemble_decode_kv(
 
     if not filtered_payloads:
         raise ValueError(f"No payloads found for decode_rank {decode_rank}")
+
+    # Validate layer, request, and kv_type consistency across all payloads
+    expected_layer = filtered_payloads[0].layer_idx
+    expected_request = filtered_payloads[0].request_id
+    expected_kv_type = filtered_payloads[0].kv_type
+
+    for p in filtered_payloads:
+        if p.layer_idx != expected_layer:
+            raise ValueError(
+                f"Inconsistent layer_idx in payloads for decode_rank {decode_rank}: "
+                f"expected {expected_layer}, got {p.layer_idx}"
+            )
+        if p.request_id != expected_request:
+            raise ValueError(
+                f"Inconsistent request_id in payloads for decode_rank {decode_rank}: "
+                f"expected {expected_request}, got {p.request_id}"
+            )
+        if p.kv_type != expected_kv_type:
+            raise ValueError(
+                f"Inconsistent kv_type in payloads for decode_rank {decode_rank}: "
+                f"expected {expected_kv_type}, got {p.kv_type}"
+            )
+
+    # Validate source-rank ownership against partition plan routes
+    decode_routes = {
+        (r.head_slice.start_head_idx, r.head_slice.end_head_idx): r.prefill_rank
+        for r in plan.transfer_routes
+        if r.decode_rank == decode_rank
+    }
+
+    for p in filtered_payloads:
+        head_key = (p.start_head_idx, p.end_head_idx)
+        if head_key not in decode_routes:
+            raise ValueError(
+                f"Unexpected head slice [{p.start_head_idx}:{p.end_head_idx}] for decode_rank {decode_rank}"
+            )
+        expected_prefill = decode_routes[head_key]
+        if p.prefill_rank != expected_prefill:
+            raise ValueError(
+                f"Unauthorized source rank for head slice [{p.start_head_idx}:{p.end_head_idx}]: "
+                f"expected prefill_rank {expected_prefill}, got {p.prefill_rank}"
+            )
 
     # Sort payloads by their starting head index to guarantee correct ordering
     sorted_payloads = sorted(filtered_payloads, key=lambda p: p.start_head_idx)
@@ -139,6 +188,27 @@ def reassemble_decode_kv(
             restored = p.data
         else:
             raise TypeError(f"Unrecognized payload data type: {type(p.data)}")
+
+        if restored.dim() < 2:
+            raise ValueError(f"Restored tensor must have >=2 dimensions, got shape {restored.shape}")
+
+        declared_heads = p.end_head_idx - p.start_head_idx
+        actual_heads = restored.shape[-2]
+        if actual_heads != declared_heads:
+            raise ValueError(
+                f"Head count mismatch in payload: declared {declared_heads} heads "
+                f"({p.start_head_idx}:{p.end_head_idx}), but actual tensor has {actual_heads} heads (shape={restored.shape})"
+            )
+
+        if uncompressed_slices:
+            if (
+                restored.shape[:-2] != uncompressed_slices[0].shape[:-2]
+                or restored.shape[-1] != uncompressed_slices[0].shape[-1]
+            ):
+                raise ValueError(
+                    f"Shape mismatch across payload slices: expected non-head shape {uncompressed_slices[0].shape[:-2]} "
+                    f"and head_dim {uncompressed_slices[0].shape[-1]}, got {restored.shape[:-2]} and {restored.shape[-1]}"
+                )
 
         uncompressed_slices.append(restored)
         current_head = p.end_head_idx

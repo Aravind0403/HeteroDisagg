@@ -106,11 +106,23 @@ def recommend_chunk_size(
     reaches or exceeds the accelerator's roofline inflection point, ensuring the
     GPU operates in its high-efficiency compute-bound regime.
     """
-    bytes_per_elem = 1 if dtype.lower() == "fp8" else 2
+    dtype_lower = dtype.lower()
+    if dtype_lower == "fp8":
+        bytes_per_elem = 1
+    elif dtype_lower == "fp32":
+        bytes_per_elem = 4
+    else:  # fp16, bf16
+        bytes_per_elem = 2
+
+    if max_chunk_limit < block_size:
+        raise ValueError(f"max_chunk_limit ({max_chunk_limit}) must be >= block_size ({block_size})")
+
     inflection = spec.get_inflection_point_flops_per_byte(dtype)
 
     candidate_sizes: List[int] = [64, 128, 256, 512, 1024, 2048, 4096, 8192]
     candidate_sizes = [c for c in candidate_sizes if c <= max_chunk_limit]
+    if not candidate_sizes:
+        candidate_sizes = [max_chunk_limit]
 
     # Find the smallest chunk size that reaches at least 85% of inflection point
     saturation_threshold = inflection * 0.85
@@ -127,21 +139,21 @@ def recommend_chunk_size(
             found_min = True
 
         if intensity >= inflection:
-            # Found full compute saturation
             optimal_tokens = tokens
             break
 
-    # Snap to nearest power-of-two or multiple of block_size
-    # Ensure minimum reasonable chunk (e.g. 512 tokens) for modern GPUs
-    final_recommended = max(512, min_saturation_tokens)
+    # Strictly respect max_chunk_limit
+    lower_bound = min(512, max_chunk_limit)
+    final_recommended = max(lower_bound, min_saturation_tokens)
+    final_recommended = min(max_chunk_limit, final_recommended)
     # Align to block_size
-    final_recommended = ((final_recommended + block_size - 1) // block_size) * block_size
+    final_recommended = max(block_size, (final_recommended // block_size) * block_size)
 
     rationale = (
         f"For {spec.device_name} running {dtype.upper()}, the inflection point is "
         f"{inflection:.1f} FLOPs/Byte. A prefill chunk size of {final_recommended} tokens "
         f"achieves sufficient arithmetic intensity to saturate the {spec.num_sms} SMs "
-        f"without causing excessive activation memory overhead."
+        f"without exceeding configured memory limits (max_chunk_limit={max_chunk_limit})."
     )
 
     return ChunkSizingRecommendation(

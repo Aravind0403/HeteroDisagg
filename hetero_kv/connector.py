@@ -144,37 +144,39 @@ class HeteroKVConnector:
         similarity_scores: List[float] = []
 
         for layer in range(num_layers):
-            # Generate ground-truth full KV tensor: (batch_size, seq_len, num_kv_heads, head_dim)
-            ground_truth = torch.randn(
-                batch_size, seq_len, self.num_kv_heads, head_dim, dtype=dtype, device=dev
-            )
-            uncompressed_layer_bytes = ground_truth.nbytes
-            total_uncompressed_bytes += uncompressed_layer_bytes
-
-            # Partition into prefill rank shards
-            prefill_shards: Dict[int, torch.Tensor] = {}
-            for p_rank in range(self.prefill_tp):
-                prefill_shards[p_rank] = slice_kv_for_prefill_rank(
-                    ground_truth, prefill_rank=p_rank, plan=self.plan
+            # Full KV transfer entails both Key and Value tensors per layer
+            for kv_comp in ("key", "value"):
+                ground_truth = torch.randn(
+                    batch_size, seq_len, self.num_kv_heads, head_dim, dtype=dtype, device=dev
                 )
+                uncompressed_layer_bytes = ground_truth.nbytes
+                total_uncompressed_bytes += uncompressed_layer_bytes
 
-            # Transfer layer
-            decode_shards, payloads, q_ms, dq_ms = self.transfer_layer_kv(
-                layer_idx=layer,
-                prefill_rank_shards=prefill_shards,
-            )
-            total_quant_ms += q_ms
-            total_dequant_ms += dq_ms
+                # Partition into prefill rank shards
+                prefill_shards: Dict[int, torch.Tensor] = {}
+                for p_rank in range(self.prefill_tp):
+                    prefill_shards[p_rank] = slice_kv_for_prefill_rank(
+                        ground_truth, prefill_rank=p_rank, plan=self.plan
+                    )
 
-            for p in payloads:
-                total_wire_bytes += p.payload_bytes
+                # Transfer layer component
+                decode_shards, payloads, q_ms, dq_ms = self.transfer_layer_kv(
+                    layer_idx=layer,
+                    prefill_rank_shards=prefill_shards,
+                )
+                total_quant_ms += q_ms
+                total_dequant_ms += dq_ms
 
-            # Glue decode shards together to check cosine similarity against ground truth
-            reconstructed_full = torch.cat(
-                [decode_shards[d] for d in range(self.decode_tp)], dim=-2
-            )
-            sim = compute_cosine_similarity(ground_truth, reconstructed_full)
-            similarity_scores.append(sim)
+                for p in payloads:
+                    p.kv_type = kv_comp
+                    total_wire_bytes += p.payload_bytes
+
+                # Glue decode shards together to check cosine similarity against ground truth
+                reconstructed_full = torch.cat(
+                    [decode_shards[d] for d in range(self.decode_tp)], dim=-2
+                )
+                sim = compute_cosine_similarity(ground_truth, reconstructed_full)
+                similarity_scores.append(sim)
 
         # Calculate simulated wire transfer time based on interconnect bandwidth
         # (Wire bytes / (Bandwidth in bytes/sec)) * 1000 for ms

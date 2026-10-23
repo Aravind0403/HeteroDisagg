@@ -81,7 +81,7 @@ def main():
     # Step 1: TCP Handshake RTT
     print(f"\n[1/3] Measuring Internal Subnet TCP Handshake RTT (Prefill -> {decode_ip}:5201)...")
     rtt_script = f"""python3 -c '
-import socket, time, statistics
+import socket, time, statistics, json
 samples = []
 for _ in range(25):
     t0 = time.perf_counter()
@@ -103,11 +103,29 @@ else:
 
     # Step 2: iperf3 Throughput (Prefill -> Decode)
     print(f"\n[2/3] Measuring Forward Bandwidth (Prefill -> Decode)...")
-    rc, iperf_fwd, err = run_ssh(prefill_pub_ip, prefill_direct_port, f"iperf3 -c {decode_ip} -t 5 -J")
+    rc_fwd, iperf_fwd, err_fwd = run_ssh(prefill_pub_ip, prefill_direct_port, f"iperf3 -c {decode_ip} -t 5 -J")
+    if rc_fwd == 0 and iperf_fwd.strip():
+        try:
+            fwd_json = json.loads(iperf_fwd)
+            bps = fwd_json.get('end', {}).get('sum_sent', {}).get('bits_per_second', 0)
+            print(f"Forward Bandwidth: {bps / 1e6:.2f} Mbps ({bps / 8e6:.2f} MB/s)")
+        except Exception:
+            print("Forward raw output:", iperf_fwd.strip()[:300])
+    else:
+        print("Forward iperf3 failed or timed out:", err_fwd.strip())
     
     # Step 3: iperf3 Reverse Throughput (Decode -> Prefill)
     print(f"\n[3/3] Measuring Reverse Bandwidth (Decode -> Prefill)...")
-    rc, iperf_rev, err = run_ssh(prefill_pub_ip, prefill_direct_port, f"iperf3 -c {decode_ip} -R -t 5 -J")
+    rc_rev, iperf_rev, err_rev = run_ssh(prefill_pub_ip, prefill_direct_port, f"iperf3 -c {decode_ip} -R -t 5 -J")
+    if rc_rev == 0 and iperf_rev.strip():
+        try:
+            rev_json = json.loads(iperf_rev)
+            bps = rev_json.get('end', {}).get('sum_received', {}).get('bits_per_second', 0)
+            print(f"Reverse Bandwidth: {bps / 1e6:.2f} Mbps ({bps / 8e6:.2f} MB/s)")
+        except Exception:
+            print("Reverse raw output:", iperf_rev.strip()[:300])
+    else:
+        print("Reverse iperf3 failed or timed out:", err_rev.strip())
 
     print("\nNetwork measurements complete.")
 

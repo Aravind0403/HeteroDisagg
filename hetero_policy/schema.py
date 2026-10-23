@@ -33,6 +33,7 @@ class ModelMetadata(BaseModel):
     num_layers: int = 32
     num_attention_heads: int = 32
     num_kv_heads: int = 8
+    parameter_count_billions: float = 8.0
 
     @property
     def head_dim(self) -> int:
@@ -47,6 +48,7 @@ POPULAR_MODELS = {
         num_layers=32,
         num_attention_heads=32,
         num_kv_heads=8,
+        parameter_count_billions=8.0,
     ),
     "llama-3-70b": ModelMetadata(
         model_name="meta-llama/Meta-Llama-3-70B-Instruct",
@@ -54,6 +56,7 @@ POPULAR_MODELS = {
         num_layers=80,
         num_attention_heads=64,
         num_kv_heads=8,
+        parameter_count_billions=70.0,
     ),
     "qwen-2.5-7b": ModelMetadata(
         model_name="Qwen/Qwen2.5-7B-Instruct",
@@ -61,6 +64,7 @@ POPULAR_MODELS = {
         num_layers=28,
         num_attention_heads=28,
         num_kv_heads=4,
+        parameter_count_billions=7.0,
     ),
     "mistral-7b": ModelMetadata(
         model_name="mistralai/Mistral-7B-Instruct-v0.3",
@@ -68,6 +72,7 @@ POPULAR_MODELS = {
         num_layers=32,
         num_attention_heads=32,
         num_kv_heads=8,
+        parameter_count_billions=7.2,
     ),
 }
 
@@ -93,3 +98,4 @@ class ClusterPlacementPlan(BaseModel):
     decode_tp: int
     num_kv_heads: int
     rationale: str
+    memory_status: str = "feasible_fp16"

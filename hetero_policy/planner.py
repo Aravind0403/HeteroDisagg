@@ -14,12 +14,24 @@ from hetero_policy.schema import (
 )
 
 
+def _find_cluster_config_dir() -> Path:
+    local_dir = Path(__file__).resolve().parent.parent / "configs" / "clusters"
+    if local_dir.exists():
+        return local_dir
+    try:
+        import configs.clusters  # type: ignore
+        return Path(configs.clusters.__file__).resolve().parent
+    except Exception:
+        pass
+    return local_dir
+
+
 def load_cluster_inventory(cluster_path: str | Path) -> Tuple[str, List[GPUInventoryItem]]:
     """Load cluster inventory from JSON file."""
     path = Path(cluster_path)
     if not path.exists():
         # Check configs/clusters/
-        candidate = Path(__file__).resolve().parent.parent / "configs" / "clusters" / cluster_path
+        candidate = _find_cluster_config_dir() / cluster_path
         if candidate.exists():
             path = candidate
         else:
@@ -47,6 +59,8 @@ def _find_best_tp_degree(available_count: int, num_kv_heads: int) -> int:
     Find the largest valid Tensor Parallelism degree <= available_count
     that evenly divides num_kv_heads.
     """
+    if available_count <= 0:
+        return 0
     for tp in [8, 4, 2, 1]:
         if tp <= available_count and num_kv_heads % tp == 0:
             return tp
@@ -61,9 +75,20 @@ def plan_cluster_placement(
     """
     Given a cluster inventory and a target model, deterministically assign
     accelerator tiers to Prefill vs. Decode roles and determine TP degrees.
+    Enforces GPU count positivity, memory feasibility, and valid tier partitioning.
     """
     if not inventory:
         raise ValueError("Cannot plan placement for an empty GPU inventory.")
+
+    for item in inventory:
+        if item.count < 1:
+            raise ValueError(
+                f"GPU inventory item count must be >= 1, got {item.count} for {item.spec.device_name}"
+            )
+        if item.cost_per_hour_usd <= 0:
+            raise ValueError(
+                f"GPU rental cost must be positive, got ${item.cost_per_hour_usd} for {item.spec.device_name}"
+            )
 
     if len(inventory) == 1:
         # Single tier cluster: split GPUs between Prefill and Decode
@@ -75,23 +100,49 @@ def plan_cluster_placement(
         prefill_item = GPUInventoryItem(spec=item.spec, count=prefill_count, cost_per_hour_usd=item.cost_per_hour_usd)
         decode_item = GPUInventoryItem(spec=item.spec, count=decode_count, cost_per_hour_usd=item.cost_per_hour_usd)
     else:
-        # Multi-tier cluster: sort by compute efficiency (TFLOPS/$) and bandwidth efficiency (GB/s/$)
-        # Tier with highest Compute Efficiency gets assigned to Prefill
-        sorted_by_compute = sorted(
-            inventory, key=lambda x: x.compute_efficiency_tflops_per_dollar, reverse=True
+        # Multi-tier cluster: select best compute efficiency tier by index to handle duplicates safely
+        best_compute_idx = max(
+            range(len(inventory)),
+            key=lambda i: inventory[i].compute_efficiency_tflops_per_dollar,
         )
-        prefill_item = sorted_by_compute[0]
+        prefill_item = inventory[best_compute_idx]
 
         # Remaining tiers evaluated for Bandwidth Efficiency
-        remaining_tiers = [x for x in inventory if x != prefill_item]
-        sorted_by_bandwidth = sorted(
-            remaining_tiers, key=lambda x: x.bandwidth_efficiency_gb_s_per_dollar, reverse=True
+        remaining_tiers = [item for i, item in enumerate(inventory) if i != best_compute_idx]
+        decode_item = max(
+            remaining_tiers,
+            key=lambda x: x.bandwidth_efficiency_gb_s_per_dollar,
         )
-        decode_item = sorted_by_bandwidth[0]
 
     # Calculate valid TP degrees respecting GQA head divisibility
     prefill_tp = _find_best_tp_degree(prefill_item.count, model.num_kv_heads)
     decode_tp = _find_best_tp_degree(decode_item.count, model.num_kv_heads)
+
+    if prefill_tp == 0 or decode_tp == 0:
+        raise ValueError("Cannot form a valid plan: computed TP degree is 0.")
+
+    # Memory feasibility validation: weights memory check
+    min_weights_fp16_gb = model.parameter_count_billions * 2.0
+    min_weights_fp8_gb = model.parameter_count_billions * 1.0
+
+    prefill_vram_gb = prefill_item.spec.memory_capacity_gb * prefill_tp
+    decode_vram_gb = decode_item.spec.memory_capacity_gb * decode_tp
+
+    if prefill_vram_gb < min_weights_fp8_gb:
+        raise ValueError(
+            f"Infeasible plan: Prefill tier ({prefill_tp}x {prefill_item.spec.device_name}, {prefill_vram_gb:.1f} GB total VRAM) "
+            f"cannot fit {model.model_name} (~{min_weights_fp8_gb:.1f} GB minimum even under FP8 quantization)."
+        )
+    if decode_vram_gb < min_weights_fp8_gb:
+        raise ValueError(
+            f"Infeasible plan: Decode tier ({decode_tp}x {decode_item.spec.device_name}, {decode_vram_gb:.1f} GB total VRAM) "
+            f"cannot fit {model.model_name} (~{min_weights_fp8_gb:.1f} GB minimum even under FP8 quantization)."
+        )
+
+    if prefill_vram_gb < min_weights_fp16_gb or decode_vram_gb < min_weights_fp16_gb:
+        memory_status = "requires_fp8_weight_quantization"
+    else:
+        memory_status = "feasible_fp16"
 
     # Derive optimal chunk size for the prefill accelerator
     chunk_rec = recommend_chunk_size(
@@ -123,12 +174,18 @@ def plan_cluster_placement(
         hourly_cost_usd=round(decode_hourly_cost, 2),
     )
 
+    quant_note = (
+        " Note: Decode tier requires FP8 weight quantization to fit model weights."
+        if memory_status == "requires_fp8_weight_quantization"
+        else ""
+    )
+
     rationale = (
         f"Assigned {prefill_item.count}x {prefill_item.spec.device_name} to Prefill (prefill_tp={prefill_tp}) "
         f"yielding {prefill_item.compute_efficiency_tflops_per_dollar:.1f} TFLOPS/$ for compute-heavy prompt encoding. "
         f"Assigned {decode_item.count}x {decode_item.spec.device_name} to Decode (decode_tp={decode_tp}) "
         f"yielding {decode_item.bandwidth_efficiency_gb_s_per_dollar:.1f} GB/s/$ for memory-bound token generation. "
-        f"Hardware-derived chunk size set to {chunk_rec.recommended_chunk_size_tokens} tokens."
+        f"Hardware-derived chunk size set to {chunk_rec.recommended_chunk_size_tokens} tokens.{quant_note}"
     )
 
     return ClusterPlacementPlan(
@@ -141,4 +198,5 @@ def plan_cluster_placement(
         decode_tp=decode_tp,
         num_kv_heads=model.num_kv_heads,
         rationale=rationale,
+        memory_status=memory_status,
     )

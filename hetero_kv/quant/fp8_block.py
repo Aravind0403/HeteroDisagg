@@ -34,10 +34,11 @@ def quantize_kv_block_fp8(
 ) -> FP8BlockPayload:
     """
     Quantize a KV cache tensor from FP16/BF16/FP32 to 8-bit using per-block scaling.
+    Blocks are formed strictly per-sequence or per-page to prevent cross-request scale contamination.
 
     Expected tensor shapes:
     - PagedAttention: (num_blocks, block_size_tokens, num_heads, head_dim)
-    - Linear: (batch_size, seq_len, num_heads, head_dim)
+    - Linear: (batch_size, seq_len, num_heads, head_dim) or (seq_len, num_heads, head_dim)
     """
     original_shape = kv_tensor.shape
     original_dtype = kv_tensor.dtype
@@ -49,25 +50,35 @@ def quantize_kv_block_fp8(
     # and already grouped by block_size, we compute scale per block
     if len(original_shape) == 4 and original_shape[1] == block_size_tokens:
         num_blocks, tokens_per_block, num_heads, head_dim = original_shape
-        # Flatten within each block across (tokens, heads, head_dim)
         reshaped = tensor_float.view(num_blocks, -1)
     else:
-        # Flatten leading dimensions into tokens
-        # Reshape to (num_blocks, block_size_tokens, -1)
-        total_elements = tensor_float.numel()
-        elements_per_head_token = original_shape[-2] * original_shape[-1]
-        elements_per_token_block = block_size_tokens * elements_per_head_token
+        # Normalize to (*batch_dims, seq_len, num_heads, head_dim)
+        if len(original_shape) < 3:
+            raise ValueError(f"KV tensor must have >=3 dimensions ([seq, heads, dim] or [batch, seq, heads, dim]), got {original_shape}")
 
-        # Pad if tokens not perfectly divisible by block_size_tokens
-        remainder = total_elements % elements_per_token_block
+        seq_len = original_shape[-3]
+        num_heads = original_shape[-2]
+        head_dim = original_shape[-1]
+        batch_numel = tensor_float.numel() // (seq_len * num_heads * head_dim)
+
+        reshaped_batch = tensor_float.view(batch_numel, seq_len, num_heads, head_dim)
+
+        # Pad sequence dimension independently per request if not divisible by block_size_tokens
+        remainder = seq_len % block_size_tokens
         if remainder != 0:
-            padding_len = elements_per_token_block - remainder
-            tensor_flat = torch.cat([tensor_float.view(-1), torch.zeros(padding_len, device=tensor_float.device)])
+            pad_tokens = block_size_tokens - remainder
+            padding = torch.zeros(
+                batch_numel, pad_tokens, num_heads, head_dim,
+                device=tensor_float.device, dtype=tensor_float.dtype
+            )
+            padded = torch.cat([reshaped_batch, padding], dim=1)
         else:
-            tensor_flat = tensor_float.view(-1)
+            padded = reshaped_batch
 
-        num_blocks = tensor_flat.numel() // elements_per_token_block
-        reshaped = tensor_flat.view(num_blocks, elements_per_token_block)
+        num_seq_blocks = padded.shape[1] // block_size_tokens
+        # Reshape into (batch_numel * num_seq_blocks, block_size_tokens * num_heads * head_dim)
+        # Every row belongs to exactly one request/sequence - ZERO cross-request sharing
+        reshaped = padded.view(batch_numel * num_seq_blocks, block_size_tokens * num_heads * head_dim)
 
     # Step 1: Find max absolute value per block
     max_vals = torch.amax(torch.abs(reshaped), dim=-1, keepdim=True)
@@ -81,12 +92,10 @@ def quantize_kv_block_fp8(
     clamped_values = torch.clamp(scaled_values, -FP8_E4M3_MAX, FP8_E4M3_MAX)
 
     # Step 4: Map to 8-bit wire representation
-    # Check if native torch.float8_e4m3fn is supported on this platform
     try:
         quantized_data = clamped_values.to(torch.float8_e4m3fn)
     except (TypeError, RuntimeError, AttributeError):
         # Portable fallback: Quantize to 8-bit signed integer [-128, 127]
-        # (normalized by 448.0 / 127.0)
         quantized_data = torch.round(clamped_values * (127.0 / FP8_E4M3_MAX)).to(torch.int8)
 
     return FP8BlockPayload(
@@ -101,6 +110,7 @@ def quantize_kv_block_fp8(
 def dequantize_kv_block_fp8(payload: FP8BlockPayload) -> torch.Tensor:
     """
     Dequantize an FP8BlockPayload back to the original floating-point precision.
+    Restores the exact original sequence shape without trailing padding.
     """
     quantized = payload.quantized_data
     scale_factors = payload.scale_factors.unsqueeze(-1)
@@ -111,13 +121,24 @@ def dequantize_kv_block_fp8(payload: FP8BlockPayload) -> torch.Tensor:
         # Dequantize from int8 fallback
         dequantized = (quantized.to(torch.float32) * (FP8_E4M3_MAX / 127.0)) * scale_factors
 
-    # Unpad / reshape back to original shape
-    original_numel = 1
-    for dim in payload.original_shape:
-        original_numel *= dim
+    orig_shape = payload.original_shape
+    if len(orig_shape) == 4 and orig_shape[1] == payload.block_size_tokens:
+        # Paged format
+        return dequantized.view(orig_shape).to(payload.original_dtype)
 
-    flattened = dequantized.view(-1)[:original_numel]
-    return flattened.view(payload.original_shape).to(payload.original_dtype)
+    seq_len = orig_shape[-3]
+    num_heads = orig_shape[-2]
+    head_dim = orig_shape[-1]
+    batch_numel = 1
+    for d in orig_shape[:-3]:
+        batch_numel *= d
+
+    num_seq_blocks = (seq_len + payload.block_size_tokens - 1) // payload.block_size_tokens
+    padded_seq_len = num_seq_blocks * payload.block_size_tokens
+
+    restored_padded = dequantized.view(batch_numel, padded_seq_len, num_heads, head_dim)
+    unpadded = restored_padded[:, :seq_len, :, :]
+    return unpadded.view(orig_shape).to(payload.original_dtype)
 
 
 def compute_cosine_similarity(tensor_a: torch.Tensor, tensor_b: torch.Tensor) -> float:

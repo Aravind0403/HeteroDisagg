@@ -11,7 +11,19 @@ import torch
 from hetero_prof.schema import AcceleratorSpec, ComputeTflops, InterconnectSpec
 
 
-CONFIG_DIR = Path(__file__).resolve().parent.parent / "configs" / "hardware"
+def _find_config_dir() -> Path:
+    local_dir = Path(__file__).resolve().parent.parent / "configs" / "hardware"
+    if local_dir.exists():
+        return local_dir
+    try:
+        import configs.hardware  # type: ignore
+        return Path(configs.hardware.__file__).resolve().parent
+    except Exception:
+        pass
+    return local_dir
+
+
+CONFIG_DIR = _find_config_dir()
 
 REFERENCE_ALIASES: Dict[str, str] = {
     "h100": "nvidia_h100_sxm5.json",
@@ -51,6 +63,8 @@ def load_spec_from_file(path_or_filename: str | Path) -> AcceleratorSpec:
 
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
+    if "provenance" not in data:
+        data["provenance"] = "reference"
     return AcceleratorSpec.model_validate(data)
 
 
@@ -77,20 +91,28 @@ def detect_device(device_index: int = 0, fallback_spec: str = "nvidia_rtx_4090.j
                 if "M1" in brand:
                     m1_path = CONFIG_DIR / "apple_m1_pro.json"
                     if m1_path.exists():
-                        return load_spec_from_file(m1_path)
+                        spec = load_spec_from_file(m1_path)
+                        spec.provenance = "detected"
+                        return spec
                 elif "M3" in brand:
                     m3_path = CONFIG_DIR / "apple_m3_max.json"
                     if m3_path.exists():
-                        return load_spec_from_file(m3_path)
+                        spec = load_spec_from_file(m3_path)
+                        spec.provenance = "detected"
+                        return spec
             except Exception:
                 pass
 
         fallback_path = CONFIG_DIR / fallback_spec
         if fallback_path.exists():
-            return load_spec_from_file(fallback_path)
+            spec = load_spec_from_file(fallback_path)
+            spec.provenance = "reference"
+            return spec
         configs = list(CONFIG_DIR.glob("*.json"))
         if configs:
-            return load_spec_from_file(configs[0])
+            spec = load_spec_from_file(configs[0])
+            spec.provenance = "reference"
+            return spec
         raise RuntimeError("No reference hardware configs were found.")
 
     device_count = torch.cuda.device_count()
@@ -113,6 +135,7 @@ def detect_device(device_index: int = 0, fallback_spec: str = "nvidia_rtx_4090.j
             # Update memory capacity with actual measured bytes
             spec_dict = spec.model_dump()
             spec_dict["memory_capacity_gb"] = total_memory_gb
+            spec_dict["provenance"] = "measured"
             return AcceleratorSpec.model_validate(spec_dict)
 
     # If not in reference library, estimate from architecture & SM count
@@ -168,4 +191,5 @@ def detect_device(device_index: int = 0, fallback_spec: str = "nvidia_rtx_4090.j
             bidirectional_bandwidth_gb_s=64.0,
             unidirectional_bandwidth_gb_s=32.0,
         ),
+        provenance="estimated",
     )

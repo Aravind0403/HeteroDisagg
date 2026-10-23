@@ -30,6 +30,7 @@ class AcceleratorSpec(BaseModel):
     memory_bandwidth_gb_s: float = Field(..., description="Peak memory bandwidth in gigabytes per second")
     compute_tflops: ComputeTflops = Field(..., description="Peak compute specifications")
     interconnect: InterconnectSpec = Field(..., description="Interconnect specifications")
+    provenance: str = Field("reference", description="Provenance of spec: 'measured', 'detected', 'reference', 'estimated'")
 
     def get_inflection_point_flops_per_byte(self, precision: str = "fp16") -> float:
         """
