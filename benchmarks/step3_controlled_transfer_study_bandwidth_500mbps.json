@@ -1,0 +1,935 @@
+{
+  "timestamp": "2026-10-23T19:16:55Z",
+  "experiment_title": "Step 3: Controlled Transfer Study \u2014 FP16 vs Always-On FP8 vs Adaptive Policy",
+  "core_research_question": "Does GPU compression reduce complete handoff latency for any tested configuration, and does the policy choose appropriately?",
+  "empirical_answer": {
+    "compression_reduced_complete_handoff_latency": true,
+    "policy_chose_appropriately_across_all_configs": false,
+    "summary_verdict": "Compression reduced complete handoff latency in at least one tested configuration."
+  },
+  "cli_invocation": [
+    "scripts/run_step3_controlled_transfer_study.py",
+    "--bandwidth-mbps",
+    "500",
+    "--seq-lens",
+    "64,256,1024",
+    "--reps",
+    "2",
+    "--warmup",
+    "1",
+    "--output",
+    "benchmarks/step3_controlled_transfer_study_bandwidth_500mbps.json"
+  ],
+  "git_metadata": {
+    "commit_hash": "71aa1d42a5b249425027c2ed8375378fc13ef4ce",
+    "branch": "main",
+    "is_dirty": true,
+    "commit_date": "2026-10-24T00:17:51+05:30"
+  },
+  "environment": {
+    "python_version": "3.11.10",
+    "torch_version": "2.5.1+cu124",
+    "transformers_version": "4.57.6",
+    "cuda_toolkit_version": "12.4",
+    "os": "Linux",
+    "arch": "x86_64",
+    "cpu_count": 36
+  },
+  "hardware_telemetry": {
+    "os": "Linux",
+    "arch": "x86_64",
+    "python_version": "3.11.10",
+    "torch_version": "2.5.1+cu124",
+    "transformers_version": "4.57.6",
+    "cuda_toolkit_version": "12.4",
+    "cuda_available": true,
+    "cuda_device_count": 2,
+    "requested_prefill_device": "cuda:0",
+    "requested_decode_device": "cuda:1",
+    "prefill_device": "cuda:0",
+    "decode_device": "cuda:1",
+    "resolved_prefill_device_index": 0,
+    "resolved_decode_device_index": 1,
+    "is_two_physical_cuda_gpus": true,
+    "transport_architecture": "Localhost TCP Socket with CPU Staging",
+    "transport_notes": "Independent OS processes communicate over 127.0.0.1 TCP socket with host-memory staging. Measures network stack serialization, framing, and socket buffer handoff; does not utilize direct CUDA IPC or NVLink P2P access.",
+    "gpu_0": {
+      "index": 0,
+      "name": "NVIDIA GeForce RTX 4070",
+      "total_memory_gb": 11.6,
+      "compute_capability": "8.9"
+    },
+    "gpu_1": {
+      "index": 1,
+      "name": "NVIDIA GeForce RTX 4070",
+      "total_memory_gb": 11.59,
+      "compute_capability": "8.9"
+    },
+    "hardware_interconnect": {
+      "can_access_peer_0_to_1": false,
+      "can_access_peer_1_to_0": false,
+      "p2p_capable": false
+    }
+  },
+  "model_metadata": {
+    "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+    "num_layers": 24,
+    "num_kv_heads": 2,
+    "head_dim": 64,
+    "checkpoint_commit_hash": "7ae557604adf67be50417f59c2c2f167def9a775"
+  },
+  "study_configuration": {
+    "swept_sequence_lengths": [
+      64,
+      256,
+      1024
+    ],
+    "repetitions_per_condition": 2,
+    "warmup_runs": 1,
+    "decode_steps": 2,
+    "prefill_device": "cuda:0",
+    "decode_device": "cuda:1",
+    "bandwidth_condition": "emulated_rate_limit_500mbps",
+    "bandwidth_mbps": 500.0,
+    "effective_policy_bandwidth_bps": 62500000.0
+  },
+  "sweep_results": [
+    {
+      "target_seq_len": 64,
+      "measured_prompt_tokens": 63,
+      "bandwidth_condition": "emulated_rate_limit_500mbps",
+      "bandwidth_mbps": 500.0,
+      "uncompressed_fp16": {
+        "individual_runs": [
+          {
+            "iteration": 1,
+            "timing": {
+              "time_to_first_token_ready_ms": 284.9416559911333,
+              "sender_wire_duration_ms": 40.9333560091909,
+              "receiver_reconstruction_duration_ms": 49.455286003649235,
+              "transfer_and_reconstruction_latency_ms": 49.75217400351539,
+              "true_inter_token_handoff_gap_ms": 330.89979900978506,
+              "first_decode_step_latency_ms": 281.07569500571117,
+              "median_subsequent_latency_ms": 35.686028000782244,
+              "raw_event_timestamps": {
+                "t_prefill_start": 88846.076396353,
+                "t_producer_token_ready": 88846.361338009,
+                "t_sender_wire_start": 88846.361339909,
+                "t_sender_wire_end": 88846.402273265,
+                "t_receiver_wire_start": 88846.361636797,
+                "t_consumer_cache_ready": 88846.411092083,
+                "t_consumer_token_ready": 88846.692237808
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 34773,
+              "body_bytes": 774144,
+              "total_wire_bytes": 809693
+            },
+            "encoding_used": "float16",
+            "tokens_match": true,
+            "max_abs_logit_error": 0.0,
+            "cosine_similarity": 0.9999943971633911,
+            "cleanup_verified": true
+          },
+          {
+            "iteration": 2,
+            "timing": {
+              "time_to_first_token_ready_ms": 281.150605995208,
+              "sender_wire_duration_ms": 40.01646500546485,
+              "receiver_reconstruction_duration_ms": 48.503040001378395,
+              "transfer_and_reconstruction_latency_ms": 48.81487600505352,
+              "true_inter_token_handoff_gap_ms": 336.5304170001764,
+              "first_decode_step_latency_ms": 287.64383000088856,
+              "median_subsequent_latency_ms": 40.12763799983077,
+              "raw_event_timestamps": {
+                "t_prefill_start": 88859.181163251,
+                "t_producer_token_ready": 88859.462313857,
+                "t_sender_wire_start": 88859.462315407,
+                "t_sender_wire_end": 88859.502331872,
+                "t_receiver_wire_start": 88859.462627243,
+                "t_consumer_cache_ready": 88859.511130283,
+                "t_consumer_token_ready": 88859.798844274
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 34773,
+              "body_bytes": 774144,
+              "total_wire_bytes": 809693
+            },
+            "encoding_used": "float16",
+            "tokens_match": true,
+            "max_abs_logit_error": 0.0,
+            "cosine_similarity": 0.9999943971633911,
+            "cleanup_verified": true
+          }
+        ],
+        "transfer_latency_stats_ms": {
+          "median": 49.284,
+          "mean": 49.284,
+          "std": 0.663,
+          "min": 48.815,
+          "max": 49.752
+        },
+        "handoff_gap_stats_ms": {
+          "median": 333.715,
+          "mean": 333.715,
+          "std": 3.981,
+          "min": 330.9,
+          "max": 336.53
+        },
+        "wire_bytes": 809693,
+        "tokens_match_all_runs": true
+      },
+      "always_fp8": {
+        "individual_runs": [
+          {
+            "iteration": 1,
+            "timing": {
+              "time_to_first_token_ready_ms": 288.20139200252015,
+              "sender_wire_duration_ms": 82.45548700506333,
+              "receiver_reconstruction_duration_ms": 102.6389239996206,
+              "transfer_and_reconstruction_latency_ms": 102.95236899401061,
+              "true_inter_token_handoff_gap_ms": 391.38255099533126,
+              "first_decode_step_latency_ms": 288.357707002433,
+              "median_subsequent_latency_ms": 38.71668998908717,
+              "raw_event_timestamps": {
+                "t_prefill_start": 88872.282650783,
+                "t_producer_token_ready": 88872.570852175,
+                "t_sender_wire_start": 88872.570853717,
+                "t_sender_wire_end": 88872.653309204,
+                "t_receiver_wire_start": 88872.571167162,
+                "t_consumer_cache_ready": 88872.673806086,
+                "t_consumer_token_ready": 88872.962234726
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 36404,
+              "body_bytes": 394752,
+              "total_wire_bytes": 431932
+            },
+            "encoding_used": "float8_e4m3fn",
+            "is_emulated_fallback": false,
+            "tokens_match": false,
+            "max_abs_logit_error": 26.771484375,
+            "cosine_similarity": 0.5176631808280945,
+            "cleanup_verified": true
+          },
+          {
+            "iteration": 2,
+            "timing": {
+              "time_to_first_token_ready_ms": 286.0239959991304,
+              "sender_wire_duration_ms": 86.5776640130207,
+              "receiver_reconstruction_duration_ms": 116.17714700696524,
+              "transfer_and_reconstruction_latency_ms": 116.52708701149095,
+              "true_inter_token_handoff_gap_ms": 411.8361469882075,
+              "first_decode_step_latency_ms": 295.2107549936045,
+              "median_subsequent_latency_ms": 37.97929199936334,
+              "raw_event_timestamps": {
+                "t_prefill_start": 88885.617189184,
+                "t_producer_token_ready": 88885.90321318,
+                "t_sender_wire_start": 88885.903214571,
+                "t_sender_wire_end": 88885.989792235,
+                "t_receiver_wire_start": 88885.903564511,
+                "t_consumer_cache_ready": 88886.019741658,
+                "t_consumer_token_ready": 88886.315049327
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 36404,
+              "body_bytes": 394752,
+              "total_wire_bytes": 431932
+            },
+            "encoding_used": "float8_e4m3fn",
+            "is_emulated_fallback": false,
+            "tokens_match": false,
+            "max_abs_logit_error": 26.771484375,
+            "cosine_similarity": 0.5176631808280945,
+            "cleanup_verified": true
+          }
+        ],
+        "transfer_latency_stats_ms": {
+          "median": 109.74,
+          "mean": 109.74,
+          "std": 9.599,
+          "min": 102.952,
+          "max": 116.527
+        },
+        "handoff_gap_stats_ms": {
+          "median": 401.609,
+          "mean": 401.609,
+          "std": 14.463,
+          "min": 391.383,
+          "max": 411.836
+        },
+        "wire_bytes": 431932,
+        "wire_compression_ratio": 1.875,
+        "tokens_match_all_runs": false
+      },
+      "adaptive_selection": {
+        "policy_evaluation": {
+          "selected_mode": "block_fp8",
+          "reason": "Favorable wire savings: saves 382.5 KB (1.95x compression) yielding estimated 2.25 ms latency reduction on 62.5 MB/s link.",
+          "predicted_uncompressed_bytes": 802880,
+          "predicted_compressed_bytes": 411200,
+          "bytes_saved": 391680,
+          "compression_ratio": 1.9525291828793774,
+          "estimated_uncompressed_latency_ms": 12.846079999999999,
+          "estimated_compressed_latency_ms": 10.596352,
+          "estimated_net_saving_ms": 2.2497279999999993,
+          "is_favorable": true
+        },
+        "selected_mode": "block_fp8",
+        "individual_runs": [
+          {
+            "iteration": 1,
+            "timing": {
+              "time_to_first_token_ready_ms": 289.77699400275014,
+              "sender_wire_duration_ms": 86.01575199281797,
+              "receiver_reconstruction_duration_ms": 106.0026939958334,
+              "transfer_and_reconstruction_latency_ms": 106.31637799087912,
+              "true_inter_token_handoff_gap_ms": 387.6092599966796,
+              "first_decode_step_latency_ms": 281.2179059983464,
+              "median_subsequent_latency_ms": 36.36411800107453,
+              "raw_event_timestamps": {
+                "t_prefill_start": 88899.02541716,
+                "t_producer_token_ready": 88899.315194154,
+                "t_sender_wire_start": 88899.315195603,
+                "t_sender_wire_end": 88899.401211355,
+                "t_receiver_wire_start": 88899.315509287,
+                "t_consumer_cache_ready": 88899.421511981,
+                "t_consumer_token_ready": 88899.702803414
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 36404,
+              "body_bytes": 394752,
+              "total_wire_bytes": 431932
+            },
+            "encoding_used": "float8_e4m3fn",
+            "tokens_match": false,
+            "max_abs_logit_error": 26.771484375,
+            "cosine_similarity": 0.5176631808280945,
+            "cleanup_verified": true
+          },
+          {
+            "iteration": 2,
+            "timing": {
+              "time_to_first_token_ready_ms": 288.2460390101187,
+              "sender_wire_duration_ms": 86.29437799390871,
+              "receiver_reconstruction_duration_ms": 106.2640599993756,
+              "transfer_and_reconstruction_latency_ms": 106.60597399692051,
+              "true_inter_token_handoff_gap_ms": 395.9880170004908,
+              "first_decode_step_latency_ms": 289.30510600912385,
+              "median_subsequent_latency_ms": 37.875641995924525,
+              "raw_event_timestamps": {
+                "t_prefill_start": 88912.490228937,
+                "t_producer_token_ready": 88912.778474976,
+                "t_sender_wire_start": 88912.77847652,
+                "t_sender_wire_end": 88912.864770898,
+                "t_receiver_wire_start": 88912.778818434,
+                "t_consumer_cache_ready": 88912.885082494,
+                "t_consumer_token_ready": 88913.174462993
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 36404,
+              "body_bytes": 394752,
+              "total_wire_bytes": 431932
+            },
+            "encoding_used": "float8_e4m3fn",
+            "tokens_match": false,
+            "max_abs_logit_error": 26.771484375,
+            "cosine_similarity": 0.5176631808280945,
+            "cleanup_verified": true
+          }
+        ],
+        "transfer_latency_stats_ms": {
+          "median": 106.461,
+          "mean": 106.461,
+          "std": 0.205,
+          "min": 106.316,
+          "max": 106.606
+        },
+        "handoff_gap_stats_ms": {
+          "median": 391.799,
+          "mean": 391.799,
+          "std": 5.925,
+          "min": 387.609,
+          "max": 395.988
+        }
+      },
+      "empirical_tradeoff": {
+        "fp8_reduced_latency": false,
+        "fp8_latency_diff_ms": 60.456,
+        "fp8_speedup_factor": 0.449,
+        "empirical_best_mode": "uncompressed_fp16",
+        "policy_made_optimal_choice": false
+      }
+    },
+    {
+      "target_seq_len": 256,
+      "measured_prompt_tokens": 252,
+      "bandwidth_condition": "emulated_rate_limit_500mbps",
+      "bandwidth_mbps": 500.0,
+      "uncompressed_fp16": {
+        "individual_runs": [
+          {
+            "iteration": 1,
+            "timing": {
+              "time_to_first_token_ready_ms": 289.3595200002892,
+              "sender_wire_duration_ms": 88.21359000285156,
+              "receiver_reconstruction_duration_ms": 98.18082700076047,
+              "transfer_and_reconstruction_latency_ms": 98.49236700392794,
+              "true_inter_token_handoff_gap_ms": 380.4563930025324,
+              "first_decode_step_latency_ms": 281.89155900327023,
+              "median_subsequent_latency_ms": 35.78440399724059,
+              "raw_event_timestamps": {
+                "t_prefill_start": 88953.821577715,
+                "t_producer_token_ready": 88954.110937235,
+                "t_sender_wire_start": 88954.11093899,
+                "t_sender_wire_end": 88954.19915258,
+                "t_receiver_wire_start": 88954.11125053,
+                "t_consumer_cache_ready": 88954.209431357,
+                "t_consumer_token_ready": 88954.491393628
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 36104,
+              "body_bytes": 3096576,
+              "total_wire_bytes": 3133456
+            },
+            "encoding_used": "float16",
+            "tokens_match": true,
+            "max_abs_logit_error": 0.0,
+            "cosine_similarity": 0.9999929070472717,
+            "cleanup_verified": true
+          },
+          {
+            "iteration": 2,
+            "timing": {
+              "time_to_first_token_ready_ms": 288.7596459913766,
+              "sender_wire_duration_ms": 88.55270298954565,
+              "receiver_reconstruction_duration_ms": 98.21709699463099,
+              "transfer_and_reconstruction_latency_ms": 98.52813598990906,
+              "true_inter_token_handoff_gap_ms": 379.44010700448416,
+              "first_decode_step_latency_ms": 280.8415579929715,
+              "median_subsequent_latency_ms": 35.316684006829746,
+              "raw_event_timestamps": {
+                "t_prefill_start": 88969.061530366,
+                "t_producer_token_ready": 88969.350290012,
+                "t_sender_wire_start": 88969.350291594,
+                "t_sender_wire_end": 88969.438844297,
+                "t_receiver_wire_start": 88969.350602633,
+                "t_consumer_cache_ready": 88969.44881973,
+                "t_consumer_token_ready": 88969.729730119
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 36104,
+              "body_bytes": 3096576,
+              "total_wire_bytes": 3133456
+            },
+            "encoding_used": "float16",
+            "tokens_match": true,
+            "max_abs_logit_error": 0.0,
+            "cosine_similarity": 0.9999929070472717,
+            "cleanup_verified": true
+          }
+        ],
+        "transfer_latency_stats_ms": {
+          "median": 98.51,
+          "mean": 98.51,
+          "std": 0.025,
+          "min": 98.492,
+          "max": 98.528
+        },
+        "handoff_gap_stats_ms": {
+          "median": 379.948,
+          "mean": 379.948,
+          "std": 0.719,
+          "min": 379.44,
+          "max": 380.456
+        },
+        "wire_bytes": 3133456,
+        "tokens_match_all_runs": true
+      },
+      "always_fp8": {
+        "individual_runs": [
+          {
+            "iteration": 1,
+            "timing": {
+              "time_to_first_token_ready_ms": 289.7113249928225,
+              "sender_wire_duration_ms": 112.89350799052045,
+              "receiver_reconstruction_duration_ms": 141.42482900933828,
+              "transfer_and_reconstruction_latency_ms": 141.73989799746778,
+              "true_inter_token_handoff_gap_ms": 425.5392240011133,
+              "first_decode_step_latency_ms": 283.7246459966991,
+              "median_subsequent_latency_ms": 35.17860600550193,
+              "raw_event_timestamps": {
+                "t_prefill_start": 88982.548182123,
+                "t_producer_token_ready": 88982.837893448,
+                "t_sender_wire_start": 88982.837895257,
+                "t_sender_wire_end": 88982.950788765,
+                "t_receiver_wire_start": 88982.838210326,
+                "t_consumer_cache_ready": 88982.979635155,
+                "t_consumer_token_ready": 88983.263432672
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 37927,
+              "body_bytes": 1579008,
+              "total_wire_bytes": 1617711
+            },
+            "encoding_used": "float8_e4m3fn",
+            "is_emulated_fallback": false,
+            "tokens_match": true,
+            "max_abs_logit_error": 0.80859375,
+            "cosine_similarity": 0.9994996786117554,
+            "cleanup_verified": true
+          },
+          {
+            "iteration": 2,
+            "timing": {
+              "time_to_first_token_ready_ms": 290.11078499024734,
+              "sender_wire_duration_ms": 108.85590499674436,
+              "receiver_reconstruction_duration_ms": 149.9491360009415,
+              "transfer_and_reconstruction_latency_ms": 150.28565700049512,
+              "true_inter_token_handoff_gap_ms": 442.9240590106929,
+              "first_decode_step_latency_ms": 292.5354030012386,
+              "median_subsequent_latency_ms": 35.869950996129774,
+              "raw_event_timestamps": {
+                "t_prefill_start": 88995.77464266,
+                "t_producer_token_ready": 88996.064753445,
+                "t_sender_wire_start": 88996.064755054,
+                "t_sender_wire_end": 88996.173610959,
+                "t_receiver_wire_start": 88996.065091575,
+                "t_consumer_cache_ready": 88996.215040711,
+                "t_consumer_token_ready": 88996.507677504
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 37927,
+              "body_bytes": 1579008,
+              "total_wire_bytes": 1617711
+            },
+            "encoding_used": "float8_e4m3fn",
+            "is_emulated_fallback": false,
+            "tokens_match": true,
+            "max_abs_logit_error": 0.80859375,
+            "cosine_similarity": 0.9994996786117554,
+            "cleanup_verified": true
+          }
+        ],
+        "transfer_latency_stats_ms": {
+          "median": 146.013,
+          "mean": 146.013,
+          "std": 6.043,
+          "min": 141.74,
+          "max": 150.286
+        },
+        "handoff_gap_stats_ms": {
+          "median": 434.232,
+          "mean": 434.232,
+          "std": 12.293,
+          "min": 425.539,
+          "max": 442.924
+        },
+        "wire_bytes": 1617711,
+        "wire_compression_ratio": 1.937,
+        "tokens_match_all_runs": true
+      },
+      "adaptive_selection": {
+        "policy_evaluation": {
+          "selected_mode": "block_fp8",
+          "reason": "Favorable wire savings: saves 1530.0 KB (1.98x compression) yielding estimated 14.76 ms latency reduction on 62.5 MB/s link.",
+          "predicted_uncompressed_bytes": 3162176,
+          "predicted_compressed_bytes": 1595456,
+          "bytes_saved": 1566720,
+          "compression_ratio": 1.9819888483292551,
+          "estimated_uncompressed_latency_ms": 50.594816,
+          "estimated_compressed_latency_ms": 35.835904,
+          "estimated_net_saving_ms": 14.758911999999999,
+          "is_favorable": true
+        },
+        "selected_mode": "block_fp8",
+        "individual_runs": [
+          {
+            "iteration": 1,
+            "timing": {
+              "time_to_first_token_ready_ms": 281.928053998854,
+              "sender_wire_duration_ms": 108.27485700428952,
+              "receiver_reconstruction_duration_ms": 137.04694900661707,
+              "transfer_and_reconstruction_latency_ms": 137.35988600819837,
+              "true_inter_token_handoff_gap_ms": 423.37191000115126,
+              "first_decode_step_latency_ms": 285.93397499935236,
+              "median_subsequent_latency_ms": 37.05641700071283,
+              "raw_event_timestamps": {
+                "t_prefill_start": 89008.910731832,
+                "t_producer_token_ready": 89009.192659886,
+                "t_sender_wire_start": 89009.192661368,
+                "t_sender_wire_end": 89009.300936225,
+                "t_receiver_wire_start": 89009.192974305,
+                "t_consumer_cache_ready": 89009.330021254,
+                "t_consumer_token_ready": 89009.616031796
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 37927,
+              "body_bytes": 1579008,
+              "total_wire_bytes": 1617711
+            },
+            "encoding_used": "float8_e4m3fn",
+            "tokens_match": true,
+            "max_abs_logit_error": 0.80859375,
+            "cosine_similarity": 0.9994996786117554,
+            "cleanup_verified": true
+          },
+          {
+            "iteration": 2,
+            "timing": {
+              "time_to_first_token_ready_ms": 285.6214259954868,
+              "sender_wire_duration_ms": 108.11606000061147,
+              "receiver_reconstruction_duration_ms": 137.09281499905046,
+              "transfer_and_reconstruction_latency_ms": 137.40301498910412,
+              "true_inter_token_handoff_gap_ms": 422.5957310118247,
+              "first_decode_step_latency_ms": 285.11541700572707,
+              "median_subsequent_latency_ms": 35.509588997229,
+              "raw_event_timestamps": {
+                "t_prefill_start": 89022.125912815,
+                "t_producer_token_ready": 89022.411534241,
+                "t_sender_wire_start": 89022.411535809,
+                "t_sender_wire_end": 89022.519651869,
+                "t_receiver_wire_start": 89022.411846009,
+                "t_consumer_cache_ready": 89022.548938824,
+                "t_consumer_token_ready": 89022.834129972
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 37927,
+              "body_bytes": 1579008,
+              "total_wire_bytes": 1617711
+            },
+            "encoding_used": "float8_e4m3fn",
+            "tokens_match": true,
+            "max_abs_logit_error": 0.80859375,
+            "cosine_similarity": 0.9994996786117554,
+            "cleanup_verified": true
+          }
+        ],
+        "transfer_latency_stats_ms": {
+          "median": 137.381,
+          "mean": 137.381,
+          "std": 0.03,
+          "min": 137.36,
+          "max": 137.403
+        },
+        "handoff_gap_stats_ms": {
+          "median": 422.984,
+          "mean": 422.984,
+          "std": 0.549,
+          "min": 422.596,
+          "max": 423.372
+        }
+      },
+      "empirical_tradeoff": {
+        "fp8_reduced_latency": false,
+        "fp8_latency_diff_ms": 47.503,
+        "fp8_speedup_factor": 0.675,
+        "empirical_best_mode": "uncompressed_fp16",
+        "policy_made_optimal_choice": false
+      }
+    },
+    {
+      "target_seq_len": 1024,
+      "measured_prompt_tokens": 1007,
+      "bandwidth_condition": "emulated_rate_limit_500mbps",
+      "bandwidth_mbps": 500.0,
+      "uncompressed_fp16": {
+        "individual_runs": [
+          {
+            "iteration": 1,
+            "timing": {
+              "time_to_first_token_ready_ms": 285.50489799818024,
+              "sender_wire_duration_ms": 246.55965399870183,
+              "receiver_reconstruction_duration_ms": 268.7199220090406,
+              "transfer_and_reconstruction_latency_ms": 269.0425610053353,
+              "true_inter_token_handoff_gap_ms": 565.2369279996492,
+              "first_decode_step_latency_ms": 296.07904198928736,
+              "median_subsequent_latency_ms": 37.927952987956814,
+              "raw_event_timestamps": {
+                "t_prefill_start": 89063.57100872,
+                "t_producer_token_ready": 89063.856513618,
+                "t_sender_wire_start": 89063.856515112,
+                "t_sender_wire_end": 89064.103074766,
+                "t_receiver_wire_start": 89063.856837751,
+                "t_consumer_cache_ready": 89064.125557673,
+                "t_consumer_token_ready": 89064.421750546
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 40861,
+              "body_bytes": 12374016,
+              "total_wire_bytes": 12415653
+            },
+            "encoding_used": "float16",
+            "tokens_match": true,
+            "max_abs_logit_error": 0.0,
+            "cosine_similarity": 0.9999979138374329,
+            "cleanup_verified": true
+          },
+          {
+            "iteration": 2,
+            "timing": {
+              "time_to_first_token_ready_ms": 292.1507400023984,
+              "sender_wire_duration_ms": 252.98881898925174,
+              "receiver_reconstruction_duration_ms": 277.5428550085053,
+              "transfer_and_reconstruction_latency_ms": 277.8878149983939,
+              "true_inter_token_handoff_gap_ms": 576.2338509957772,
+              "first_decode_step_latency_ms": 298.2193579955492,
+              "median_subsequent_latency_ms": 37.978612002916634,
+              "raw_event_timestamps": {
+                "t_prefill_start": 89077.147460949,
+                "t_producer_token_ready": 89077.439611689,
+                "t_sender_wire_start": 89077.439613216,
+                "t_sender_wire_end": 89077.692602035,
+                "t_receiver_wire_start": 89077.439958176,
+                "t_consumer_cache_ready": 89077.717501031,
+                "t_consumer_token_ready": 89078.01584554
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 40861,
+              "body_bytes": 12374016,
+              "total_wire_bytes": 12415653
+            },
+            "encoding_used": "float16",
+            "tokens_match": true,
+            "max_abs_logit_error": 0.0,
+            "cosine_similarity": 0.9999979138374329,
+            "cleanup_verified": true
+          }
+        ],
+        "transfer_latency_stats_ms": {
+          "median": 273.465,
+          "mean": 273.465,
+          "std": 6.255,
+          "min": 269.043,
+          "max": 277.888
+        },
+        "handoff_gap_stats_ms": {
+          "median": 570.735,
+          "mean": 570.735,
+          "std": 7.776,
+          "min": 565.237,
+          "max": 576.234
+        },
+        "wire_bytes": 12415653,
+        "tokens_match_all_runs": true
+      },
+      "always_fp8": {
+        "individual_runs": [
+          {
+            "iteration": 1,
+            "timing": {
+              "time_to_first_token_ready_ms": 288.57238400087226,
+              "sender_wire_duration_ms": 188.6927870073123,
+              "receiver_reconstruction_duration_ms": 248.05063199892174,
+              "transfer_and_reconstruction_latency_ms": 248.3561830013059,
+              "true_inter_token_handoff_gap_ms": 531.4145570009714,
+              "first_decode_step_latency_ms": 282.98323099443223,
+              "median_subsequent_latency_ms": 35.90052798972465,
+              "raw_event_timestamps": {
+                "t_prefill_start": 89090.810939099,
+                "t_producer_token_ready": 89091.099511483,
+                "t_sender_wire_start": 89091.099513218,
+                "t_sender_wire_end": 89091.288206005,
+                "t_receiver_wire_start": 89091.099818769,
+                "t_consumer_cache_ready": 89091.347869401,
+                "t_consumer_token_ready": 89091.63092604
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 42588,
+              "body_bytes": 6217344,
+              "total_wire_bytes": 6260708
+            },
+            "encoding_used": "float8_e4m3fn",
+            "is_emulated_fallback": false,
+            "tokens_match": true,
+            "max_abs_logit_error": 0.732421875,
+            "cosine_similarity": 0.9990496039390564,
+            "cleanup_verified": true
+          },
+          {
+            "iteration": 2,
+            "timing": {
+              "time_to_first_token_ready_ms": 284.855702004279,
+              "sender_wire_duration_ms": 186.40160700306296,
+              "receiver_reconstruction_duration_ms": 246.78135800058953,
+              "transfer_and_reconstruction_latency_ms": 247.1063880075235,
+              "true_inter_token_handoff_gap_ms": 531.4794680016348,
+              "first_decode_step_latency_ms": 284.2941639974015,
+              "median_subsequent_latency_ms": 36.678175994893536,
+              "raw_event_timestamps": {
+                "t_prefill_start": 89104.251083659,
+                "t_producer_token_ready": 89104.535939361,
+                "t_sender_wire_start": 89104.5359408,
+                "t_sender_wire_end": 89104.722342407,
+                "t_receiver_wire_start": 89104.53626583,
+                "t_consumer_cache_ready": 89104.783047188,
+                "t_consumer_token_ready": 89105.067418829
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 42588,
+              "body_bytes": 6217344,
+              "total_wire_bytes": 6260708
+            },
+            "encoding_used": "float8_e4m3fn",
+            "is_emulated_fallback": false,
+            "tokens_match": true,
+            "max_abs_logit_error": 0.732421875,
+            "cosine_similarity": 0.9990496039390564,
+            "cleanup_verified": true
+          }
+        ],
+        "transfer_latency_stats_ms": {
+          "median": 247.731,
+          "mean": 247.731,
+          "std": 0.884,
+          "min": 247.106,
+          "max": 248.356
+        },
+        "handoff_gap_stats_ms": {
+          "median": 531.447,
+          "mean": 531.447,
+          "std": 0.046,
+          "min": 531.415,
+          "max": 531.479
+        },
+        "wire_bytes": 6260708,
+        "wire_compression_ratio": 1.983,
+        "tokens_match_all_runs": true
+      },
+      "adaptive_selection": {
+        "policy_evaluation": {
+          "selected_mode": "block_fp8",
+          "reason": "Favorable wire savings: saves 6120.0 KB (1.99x compression) yielding estimated 64.80 ms latency reduction on 62.5 MB/s link.",
+          "predicted_uncompressed_bytes": 12599360,
+          "predicted_compressed_bytes": 6332480,
+          "bytes_saved": 6266880,
+          "compression_ratio": 1.9896407094850674,
+          "estimated_uncompressed_latency_ms": 201.58976,
+          "estimated_compressed_latency_ms": 136.79411199999998,
+          "estimated_net_saving_ms": 64.79564800000001,
+          "is_favorable": true
+        },
+        "selected_mode": "block_fp8",
+        "individual_runs": [
+          {
+            "iteration": 1,
+            "timing": {
+              "time_to_first_token_ready_ms": 292.18974999093916,
+              "sender_wire_duration_ms": 189.41273099335376,
+              "receiver_reconstruction_duration_ms": 234.10651199810673,
+              "transfer_and_reconstruction_latency_ms": 234.41919499600772,
+              "true_inter_token_handoff_gap_ms": 519.5938990073046,
+              "first_decode_step_latency_ms": 285.10207899671514,
+              "median_subsequent_latency_ms": 36.21639100310858,
+              "raw_event_timestamps": {
+                "t_prefill_start": 89117.530117557,
+                "t_producer_token_ready": 89117.822307307,
+                "t_sender_wire_start": 89117.822308823,
+                "t_sender_wire_end": 89118.011721554,
+                "t_receiver_wire_start": 89117.822621506,
+                "t_consumer_cache_ready": 89118.056728018,
+                "t_consumer_token_ready": 89118.341901206
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 42588,
+              "body_bytes": 6217344,
+              "total_wire_bytes": 6260708
+            },
+            "encoding_used": "float8_e4m3fn",
+            "tokens_match": true,
+            "max_abs_logit_error": 0.732421875,
+            "cosine_similarity": 0.9990496039390564,
+            "cleanup_verified": true
+          },
+          {
+            "iteration": 2,
+            "timing": {
+              "time_to_first_token_ready_ms": 289.2252849997021,
+              "sender_wire_duration_ms": 190.0298929976998,
+              "receiver_reconstruction_duration_ms": 236.65020598855335,
+              "transfer_and_reconstruction_latency_ms": 236.96912999730557,
+              "true_inter_token_handoff_gap_ms": 527.8034570073942,
+              "first_decode_step_latency_ms": 290.75720900436863,
+              "median_subsequent_latency_ms": 37.80154300329741,
+              "raw_event_timestamps": {
+                "t_prefill_start": 89130.78102575,
+                "t_producer_token_ready": 89131.070251035,
+                "t_sender_wire_start": 89131.07025249,
+                "t_sender_wire_end": 89131.260282383,
+                "t_receiver_wire_start": 89131.070571414,
+                "t_consumer_cache_ready": 89131.30722162,
+                "t_consumer_token_ready": 89131.598054492
+              }
+            },
+            "wire_accounting": {
+              "framing_bytes": 776,
+              "metadata_bytes": 42588,
+              "body_bytes": 6217344,
+              "total_wire_bytes": 6260708
+            },
+            "encoding_used": "float8_e4m3fn",
+            "tokens_match": true,
+            "max_abs_logit_error": 0.732421875,
+            "cosine_similarity": 0.9990496039390564,
+            "cleanup_verified": true
+          }
+        ],
+        "transfer_latency_stats_ms": {
+          "median": 235.694,
+          "mean": 235.694,
+          "std": 1.803,
+          "min": 234.419,
+          "max": 236.969
+        },
+        "handoff_gap_stats_ms": {
+          "median": 523.699,
+          "mean": 523.699,
+          "std": 5.805,
+          "min": 519.594,
+          "max": 527.803
+        }
+      },
+      "empirical_tradeoff": {
+        "fp8_reduced_latency": true,
+        "fp8_latency_diff_ms": -25.734,
+        "fp8_speedup_factor": 1.104,
+        "empirical_best_mode": "block_fp8",
+        "policy_made_optimal_choice": true
+      }
+    }
+  ]
+}
