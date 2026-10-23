@@ -211,6 +211,27 @@ def benchmark_gpu_codec_micro(
     return results
 
 
+def extract_kv_layer(cache: Any, l: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Extract (key, value) tensors for layer l across transformers 4.x and 5.x cache formats."""
+    if hasattr(cache, "layers"):
+        return cache.layers[l].keys, cache.layers[l].values
+    elif hasattr(cache, "key_cache") and hasattr(cache, "value_cache"):
+        return cache.key_cache[l], cache.value_cache[l]
+    elif isinstance(cache, (tuple, list)):
+        return cache[l][0], cache[l][1]
+    else:
+        return cache[l][0], cache[l][1]
+
+
+def get_cache_num_layers(cache: Any) -> int:
+    """Return number of layers in cache across transformers 4.x and 5.x formats."""
+    if hasattr(cache, "layers"):
+        return len(cache.layers)
+    elif hasattr(cache, "key_cache"):
+        return len(cache.key_cache)
+    return len(cache)
+
+
 def run_real_model_single_gpu_validation(
     model_id: str = "Qwen/Qwen2.5-0.5B-Instruct",
     prompt: str = "Heterogeneous disaggregated inference enables scalable GPU clusters by",
@@ -250,11 +271,12 @@ def run_real_model_single_gpu_validation(
 
     # Run uninterrupted baseline decoding
     base_cache = DynamicCache()
-    num_layers = len(prefill_cache.layers)
+    num_layers = get_cache_num_layers(prefill_cache)
     for l in range(num_layers):
+        k_l, v_l = extract_kv_layer(prefill_cache, l)
         base_cache.update(
-            prefill_cache.layers[l].keys.clone(),
-            prefill_cache.layers[l].values.clone(),
+            k_l.clone(),
+            v_l.clone(),
             layer_idx=l,
         )
 
@@ -286,8 +308,7 @@ def run_real_model_single_gpu_validation(
         is_fallback = False
 
         for l in range(num_layers):
-            orig_k = prefill_cache.layers[l].keys
-            orig_v = prefill_cache.layers[l].values
+            orig_k, orig_v = extract_kv_layer(prefill_cache, l)
             k_hetero = orig_k.permute(0, 2, 1, 3).contiguous()
             v_hetero = orig_v.permute(0, 2, 1, 3).contiguous()
 
