@@ -497,3 +497,93 @@ def test_step2_explicit_cuda_device_forwarding_with_parent_current_device_1():
             assert results["hardware_telemetry"]["decode_device"] == "cuda:0"
             assert results["hardware_telemetry"]["requested_prefill_device"] == "cuda"
             assert results["hardware_telemetry"]["requested_decode_device"] == "cuda:0"
+
+
+def test_step3_controlled_study_structure_and_mock():
+    """
+    Verifies that Step 3 controlled transfer study exports individual measurements,
+    evaluates AdaptiveCompressionPolicy, records empirical trade-offs, and validates cleanup.
+    """
+    from scripts.run_step3_controlled_transfer_study import run_step3_controlled_study
+
+    with tempfile.TemporaryDirectory() as td:
+        out_json = os.path.join(td, "step3_test.json")
+
+        dummy_logits = torch.zeros((1, 10))
+        dummy_tokens = [1]
+        dummy_timing = {
+            "time_to_first_token_ready_ms": 2.0,
+            "sender_wire_duration_ms": 1.0,
+            "receiver_reconstruction_duration_ms": 1.0,
+            "transfer_and_reconstruction_latency_ms": 3.0,
+            "true_inter_token_handoff_gap_ms": 5.0,
+            "first_decode_step_latency_ms": 2.0,
+            "median_subsequent_latency_ms": 2.0,
+            "raw_event_timestamps": {},
+        }
+        dummy_accounting = {
+            "framing_bytes": 10,
+            "metadata_bytes": 100,
+            "body_bytes": 1000,
+            "total_wire_bytes": 1110,
+        }
+
+        with patch("scripts.run_step3_controlled_transfer_study.run_baseline_continuation") as mock_baseline, \
+             patch("scripts.run_step3_controlled_transfer_study.execute_handoff_iteration") as mock_iter:
+
+            mock_baseline.return_value = (dummy_logits, dummy_tokens, "test continuation")
+            mock_iter.return_value = {
+                "consumer": {
+                    "generated_tokens": dummy_tokens,
+                    "generated_text": "test continuation",
+                    "wire_accounting": dummy_accounting,
+                },
+                "producer": {
+                    "encoding_used": "float16",
+                    "is_emulated_fallback": False,
+                },
+                "consumer_logits": dummy_logits,
+                "cleanup_report": {
+                    "all_child_processes_reaped": True,
+                    "temporary_files_deleted": True,
+                    "surviving_pids": [],
+                    "leaked_temp_files": [],
+                },
+                "timing": dummy_timing,
+            }
+
+            results = run_step3_controlled_study(
+                model_id="Qwen/Qwen2.5-0.5B-Instruct",
+                seq_lens=[32],
+                repetitions=2,
+                warmup_runs=0,
+                decode_steps=1,
+                prefill_device="cpu",
+                decode_device="cpu",
+                bandwidth_mbps=1000.0,
+                output_path=out_json,
+            )
+
+            assert os.path.exists(out_json)
+            assert len(results["sweep_results"]) == 1
+            sweep = results["sweep_results"][0]
+            assert sweep["target_seq_len"] == 32
+            assert sweep["bandwidth_condition"] == "emulated_rate_limit_1000mbps"
+
+            # Check individual runs saved
+            assert len(sweep["uncompressed_fp16"]["individual_runs"]) == 2
+            assert len(sweep["always_fp8"]["individual_runs"]) == 2
+            assert len(sweep["adaptive_selection"]["individual_runs"]) == 2
+
+            # Check stats computed
+            assert "median" in sweep["uncompressed_fp16"]["transfer_latency_stats_ms"]
+            assert "std" in sweep["uncompressed_fp16"]["transfer_latency_stats_ms"]
+
+            # Check policy evaluation present
+            assert "policy_evaluation" in sweep["adaptive_selection"]
+            assert "selected_mode" in sweep["adaptive_selection"]
+
+            # Check empirical tradeoff
+            assert "fp8_reduced_latency" in sweep["empirical_tradeoff"]
+            assert "policy_made_optimal_choice" in sweep["empirical_tradeoff"]
+
