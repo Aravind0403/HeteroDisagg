@@ -1,30 +1,50 @@
 {
   "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
-  "enable_fp8": false,
+  "enable_fp8": true,
   "block_size_tokens": 16,
   "pids": {
-    "orchestrator_pid": 37182,
-    "producer_pid": 37186,
-    "consumer_pid": 37184
+    "orchestrator_pid": 48954,
+    "producer_pid": 48961,
+    "consumer_pid": 48959
   },
-  "assigned_port": 56334,
+  "device_placement": {
+    "prefill_device": "cpu",
+    "decode_device": "cpu"
+  },
+  "codec_telemetry": {
+    "enable_fp8": true,
+    "encoding_used": "float8_e4m3fn",
+    "is_emulated_fallback": false,
+    "block_size_tokens": 16
+  },
+  "timing_decomposition": {
+    "time_to_first_emitted_token_ms": 850.1563330064528,
+    "handoff_duration_ms": 8.310707984492183,
+    "first_decode_step_latency_ms": 163.14679197967052,
+    "inter_token_handoff_gap_ms": 171.4574999641627,
+    "subsequent_step_latencies_ms": [
+      71.69991702539846
+    ],
+    "median_subsequent_latency_ms": 71.69991702539846
+  },
+  "assigned_port": 61771,
   "all_tokens_match": true,
-  "max_abs_logit_divergence": 0.0,
-  "mean_cosine_similarity": 1.0,
-  "tolerance": "|\u0394 Logits| <= 1e-6",
+  "max_abs_logit_divergence": 0.5653343200683594,
+  "mean_cosine_similarity": 0.999464,
+  "tolerance": "Mean Cosine Sim >= 0.99 & Tensor Body Compressed",
   "divergence_within_tolerance": true,
-  "baseline_generated_text": " the use of different",
-  "reconstructed_generated_text": " the use of different",
+  "baseline_generated_text": " the use",
+  "reconstructed_generated_text": " the use",
   "wire_accounting": {
     "framing_bytes": 776,
-    "metadata_bytes": 34525,
-    "body_bytes": 172032,
-    "total_wire_bytes": 207333,
+    "metadata_bytes": 36156,
+    "body_bytes": 98688,
+    "total_wire_bytes": 135620,
     "uncompressed_fp32_bytes": 172032,
     "uncompressed_fp16_bytes": 86016,
-    "ratio_vs_fp32": 1.0,
-    "ratio_vs_fp16": 0.5,
-    "wire_reduction_vs_fp16_pct": -100.0
+    "ratio_vs_fp32": 1.74,
+    "ratio_vs_fp16": 0.87,
+    "wire_reduction_vs_fp16_pct": -14.7
   },
   "step_comparisons": [
     {
@@ -34,8 +54,8 @@
       "reconstructed_token": 279,
       "reconstructed_token_str": " the",
       "tokens_match": true,
-      "max_abs_logit_error": 0.0,
-      "cosine_similarity": 1.0
+      "max_abs_logit_error": 0.5653343200683594,
+      "cosine_similarity": 0.9994050860404968
     },
     {
       "step": 2,
@@ -44,28 +64,8 @@
       "reconstructed_token": 990,
       "reconstructed_token_str": " use",
       "tokens_match": true,
-      "max_abs_logit_error": 0.0,
-      "cosine_similarity": 1.0
-    },
-    {
-      "step": 3,
-      "baseline_token": 315,
-      "baseline_token_str": " of",
-      "reconstructed_token": 315,
-      "reconstructed_token_str": " of",
-      "tokens_match": true,
-      "max_abs_logit_error": 0.0,
-      "cosine_similarity": 1.0
-    },
-    {
-      "step": 4,
-      "baseline_token": 2155,
-      "baseline_token_str": " different",
-      "reconstructed_token": 2155,
-      "reconstructed_token_str": " different",
-      "tokens_match": true,
-      "max_abs_logit_error": 0.0,
-      "cosine_similarity": 1.0
+      "max_abs_logit_error": 0.4584774971008301,
+      "cosine_similarity": 0.9995224475860596
     }
   ]
 }

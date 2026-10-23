@@ -929,3 +929,33 @@ def test_accumulator_duplicate_and_missing_layer_rejection():
     with pytest.raises(FrameValidationError, match="Incomplete KV cache"):
         acc.reconstruct_uncompressed_cache()
 
+
+def test_process_and_resource_cleanup_on_injected_failure():
+    """
+    Exercises cleanup through failure paths rather than inferring it from success:
+    1. Injects an intentional failure (body length mismatch).
+    2. Proves run_socket_cache_handoff_experiment raises RuntimeError.
+    3. Confirms that no temporary logits files leak in the filesystem.
+    """
+    import glob
+    import tempfile
+
+    temp_dir = tempfile.gettempdir()
+    initial_temp_files = set(glob.glob(os.path.join(temp_dir, f"hkv_logits_{os.getpid()}_*.pt")))
+
+    with pytest.raises(RuntimeError, match="(Producer failed|Consumer failed)"):
+        run_socket_cache_handoff_experiment(
+            model_id="Qwen/Qwen2.5-0.5B-Instruct",
+            prompt="Heterogeneous disaggregated inference allows",
+            decode_steps=2,
+            prefill_tp=2,
+            decode_tp=1,
+            device="cpu",
+            timeout=10.0,
+            corrupt_frame="body_length_mismatch",
+        )
+
+    final_temp_files = set(glob.glob(os.path.join(temp_dir, f"hkv_logits_{os.getpid()}_*.pt")))
+    assert final_temp_files == initial_temp_files, f"Leaked temp files: {final_temp_files - initial_temp_files}"
+
+

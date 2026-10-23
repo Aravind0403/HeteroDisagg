@@ -1,0 +1,150 @@
+{
+  "timestamp": "2026-10-23T15:31:28Z",
+  "hardware_telemetry": {
+    "device_str": "mps",
+    "device_type": "mps",
+    "os": "Darwin",
+    "arch": "arm64",
+    "python_version": "3.12.8",
+    "torch_version": "2.10.0",
+    "cuda_available": false,
+    "mps_available": true,
+    "software_fp8_dtype_available": true,
+    "gpu_name": "Apple Silicon (mps)",
+    "compute_capability": "N/A",
+    "architecture_family": "Apple Silicon Unified Memory",
+    "native_fp8_gemm_support": false,
+    "architecture_notes": "Non-CUDA device; tests wire codec packing and software dequantization."
+  },
+  "gpu_codec_microbenchmarks": [
+    {
+      "seq_len": 128,
+      "tensor_shape": [
+        1,
+        128,
+        8,
+        128
+      ],
+      "encoding_used": "int8",
+      "is_emulated_fallback": true,
+      "quant_duration_ms": 0.227,
+      "dequant_duration_ms": 0.228,
+      "total_codec_overhead_ms": 0.454,
+      "cosine_similarity": 0.999957,
+      "max_abs_error": 0.01767309010028839,
+      "uncompressed_fp16_bytes": 262144,
+      "wire_payload_bytes": 131104,
+      "ratio_vs_fp16": 2.0
+    },
+    {
+      "seq_len": 512,
+      "tensor_shape": [
+        1,
+        512,
+        8,
+        128
+      ],
+      "encoding_used": "int8",
+      "is_emulated_fallback": true,
+      "quant_duration_ms": 0.207,
+      "dequant_duration_ms": 0.065,
+      "total_codec_overhead_ms": 0.272,
+      "cosine_similarity": 0.999957,
+      "max_abs_error": 0.01982414722442627,
+      "uncompressed_fp16_bytes": 1048576,
+      "wire_payload_bytes": 524416,
+      "ratio_vs_fp16": 2.0
+    },
+    {
+      "seq_len": 1024,
+      "tensor_shape": [
+        1,
+        1024,
+        8,
+        128
+      ],
+      "encoding_used": "int8",
+      "is_emulated_fallback": true,
+      "quant_duration_ms": 0.172,
+      "dequant_duration_ms": 0.058,
+      "total_codec_overhead_ms": 0.23,
+      "cosine_similarity": 0.999956,
+      "max_abs_error": 0.019516050815582275,
+      "uncompressed_fp16_bytes": 2097152,
+      "wire_payload_bytes": 1048832,
+      "ratio_vs_fp16": 2.0
+    },
+    {
+      "seq_len": 2048,
+      "tensor_shape": [
+        1,
+        2048,
+        8,
+        128
+      ],
+      "encoding_used": "int8",
+      "is_emulated_fallback": true,
+      "quant_duration_ms": 0.207,
+      "dequant_duration_ms": 0.084,
+      "total_codec_overhead_ms": 0.291,
+      "cosine_similarity": 0.999957,
+      "max_abs_error": 0.01865779608488083,
+      "uncompressed_fp16_bytes": 4194304,
+      "wire_payload_bytes": 2097664,
+      "ratio_vs_fp16": 2.0
+    }
+  ],
+  "real_model_cache_handoff": {
+    "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+    "prompt_tokens": 11,
+    "decode_steps": 4,
+    "baseline_generated_text": " the parallelism of",
+    "modes": {
+      "uncompressed_exact": {
+        "status": "PASS",
+        "encoding_used": "float32",
+        "is_emulated_fallback": false,
+        "tokens_match": true,
+        "max_abs_logit_error": 0.0,
+        "mean_cosine_similarity": 1.000008,
+        "generated_tokens": [
+          279,
+          15279,
+          2142,
+          315
+        ],
+        "generated_text": " the parallelism of",
+        "timing_decomposition": {
+          "time_to_first_token_ms": 182.42,
+          "codec_handoff_duration_ms": 2.49,
+          "first_decode_step_latency_ms": 27.2,
+          "inter_token_handoff_gap_ms": 29.69,
+          "median_subsequent_latency_ms": 26.56
+        }
+      },
+      "fp8_wire_codec": {
+        "status": "PASS",
+        "encoding_used": "int8",
+        "is_emulated_fallback": true,
+        "tokens_match": true,
+        "max_abs_logit_error": 0.3279224634170532,
+        "mean_cosine_similarity": 0.999825,
+        "generated_tokens": [
+          279,
+          15279,
+          2142,
+          315
+        ],
+        "generated_text": " the parallelism of",
+        "timing_decomposition": {
+          "time_to_first_token_ms": 182.42,
+          "codec_handoff_duration_ms": 329.71,
+          "first_decode_step_latency_ms": 33.08,
+          "inter_token_handoff_gap_ms": 362.79,
+          "median_subsequent_latency_ms": 25.12
+        }
+      }
+    }
+  },
+  "step1_completion_status": true
+}

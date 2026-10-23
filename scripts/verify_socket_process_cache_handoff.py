@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import json
 import socket
+import statistics
 import tempfile
 import time
 import uuid
@@ -70,10 +71,11 @@ def decode_consumer_worker(
     3. Accepts connection from prefill producer.
     4. Receives and validates RequestManifest against expected model config.
     5. Receives all frames, accumulating and validating against plan and manifest.
-    6. Reconstructs DynamicCache and decodes `decode_steps` continuation tokens.
-    7. Returns results and process telemetry to result_queue.
+    6. Reconstructs DynamicCache and decodes `decode_steps` continuation tokens on target device.
+    7. Returns results, timing decomposition, and process telemetry to result_queue.
     """
     consumer_pid = os.getpid()
+    torch_device = torch.device(device)
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_sock.bind(("127.0.0.1", 0))
@@ -92,10 +94,15 @@ def decode_consumer_worker(
         conn, addr = server_sock.accept()
         conn.settimeout(timeout)
 
-        # 1. Load local model to inspect config and run decoding
+        # 1. Load local model to inspect config and run decoding on target device
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32)
+        model.to(torch_device)
         model.eval()
+
+        if torch_device.type == "cuda":
+            torch.cuda.synchronize(torch_device)
+        t_handoff_start = time.perf_counter()
 
         # 2. Receive and validate request manifest against consumer's expected model config
         manifest, manifest_acc = recv_manifest(conn, timeout=timeout)
@@ -124,21 +131,31 @@ def decode_consumer_worker(
         accumulator.validate_completeness()
         raw_cache_dict = accumulator.reconstruct_cache()
 
-        # 5. Populate cache and decode continuation tokens
+        # 5. Populate cache on target device
         reconstructed_cache = DynamicCache()
         for l in range(manifest.num_layers):
             reconstructed_cache.update(
-                raw_cache_dict["keys"][l].to(device),
-                raw_cache_dict["values"][l].to(device),
+                raw_cache_dict["keys"][l].to(torch_device),
+                raw_cache_dict["values"][l].to(torch_device),
                 layer_idx=l,
             )
 
+        if torch_device.type == "cuda":
+            torch.cuda.synchronize(torch_device)
+        t_handoff_end = time.perf_counter()
+        handoff_duration_ms = (t_handoff_end - t_handoff_start) * 1000.0
+
+        # 6. Decode continuation tokens measuring per-token step durations
         curr_cache = reconstructed_cache
-        curr_token = torch.tensor([[manifest.initial_decode_token]], device=device)
+        curr_token = torch.tensor([[manifest.initial_decode_token]], device=torch_device)
         generated_tokens: List[int] = []
         step_logits_list: List[torch.Tensor] = []
+        step_durations_ms: List[float] = []
 
         for step in range(decode_steps):
+            if torch_device.type == "cuda":
+                torch.cuda.synchronize(torch_device)
+            t_s = time.perf_counter()
             with torch.no_grad():
                 out = model(input_ids=curr_token, past_key_values=curr_cache, use_cache=True)
                 logits = out.logits[:, -1, :]
@@ -148,6 +165,19 @@ def decode_consumer_worker(
                 tok_id = int(next_tok.item())
                 generated_tokens.append(tok_id)
                 step_logits_list.append(logits[0].cpu())
+            if torch_device.type == "cuda":
+                torch.cuda.synchronize(torch_device)
+            t_e = time.perf_counter()
+            step_durations_ms.append((t_e - t_s) * 1000.0)
+
+        first_decode_step_latency_ms = step_durations_ms[0] if step_durations_ms else 0.0
+        subsequent_step_latencies_ms = step_durations_ms[1:] if len(step_durations_ms) > 1 else []
+        median_subsequent_latency_ms = (
+            statistics.median(subsequent_step_latencies_ms)
+            if subsequent_step_latencies_ms
+            else first_decode_step_latency_ms
+        )
+        inter_token_handoff_gap_ms = handoff_duration_ms + first_decode_step_latency_ms
 
         generated_text = tokenizer.decode(generated_tokens)
         stacked_logits = torch.stack(step_logits_list, dim=0)  # [steps, vocab_size]
@@ -168,6 +198,11 @@ def decode_consumer_worker(
                 "generated_tokens": generated_tokens,
                 "generated_text": generated_text,
                 "temp_logits_path": temp_logits_path,
+                "handoff_duration_ms": handoff_duration_ms,
+                "first_decode_step_latency_ms": first_decode_step_latency_ms,
+                "inter_token_handoff_gap_ms": inter_token_handoff_gap_ms,
+                "subsequent_step_latencies_ms": subsequent_step_latencies_ms,
+                "median_subsequent_latency_ms": median_subsequent_latency_ms,
             }
         )
 
@@ -218,20 +253,28 @@ def prefill_producer_worker(
     client_sock.settimeout(timeout)
 
     try:
+        torch_device = torch.device(device)
         # Load model and run prefill
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32)
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32).to(torch_device)
         model.eval()
 
         inputs = tokenizer(prompt, return_tensors="pt")
-        input_ids = inputs.input_ids.to(device)
+        input_ids = inputs.input_ids.to(torch_device)
         prompt_tokens = input_ids[0].tolist()
 
+        if torch_device.type == "cuda":
+            torch.cuda.synchronize(torch_device)
+        t_prefill_start = time.perf_counter()
         with torch.no_grad():
             out_prefill = model(input_ids=input_ids, use_cache=True)
             prefill_cache = out_prefill.past_key_values
             initial_next_token = int(torch.argmax(out_prefill.logits[:, -1, :], dim=-1).item())
             initial_token_str = tokenizer.decode([initial_next_token])
+        if torch_device.type == "cuda":
+            torch.cuda.synchronize(torch_device)
+        t_prefill_end = time.perf_counter()
+        time_to_first_emitted_token_ms = (t_prefill_end - t_prefill_start) * 1000.0
 
         num_layers = len(prefill_cache.layers)
         num_kv_heads = getattr(model.config, "num_key_value_heads", model.config.num_attention_heads)
@@ -275,6 +318,9 @@ def prefill_producer_worker(
 
         acc = send_manifest(client_sock, manifest)
 
+        encoding_used = "float32"
+        is_emulated_fallback = False
+
         # Transmit all frames
         for l in range(num_layers):
             orig_k = prefill_cache.layers[l].keys
@@ -293,6 +339,8 @@ def prefill_producer_worker(
                         compressed = quantize_kv_block_fp8(shard, block_size_tokens=block_size_tokens)
                         is_f8 = compressed.quantized_data.dtype == getattr(torch, "float8_e4m3fn", None)
                         dtype_str = "float8_e4m3fn" if is_f8 else "int8"
+                        encoding_used = dtype_str
+                        is_emulated_fallback = not is_f8
                         quant_bytes = compressed.quantized_data.view(torch.uint8).cpu().numpy().tobytes()
                         scale_bytes = compressed.scale_factors.cpu().numpy().tobytes()
                         body = quant_bytes + scale_bytes
@@ -344,6 +392,9 @@ def prefill_producer_worker(
                 "producer_pid": producer_pid,
                 "initial_token": initial_next_token,
                 "initial_token_str": initial_token_str,
+                "time_to_first_emitted_token_ms": time_to_first_emitted_token_ms,
+                "encoding_used": encoding_used,
+                "is_emulated_fallback": is_emulated_fallback,
                 "total_wire_bytes": acc.total_wire_bytes,
             }
         )
@@ -372,8 +423,11 @@ def run_socket_cache_handoff_experiment(
     decode_tp: int = 1,
     enable_fp8: bool = False,
     block_size_tokens: int = 16,
-    device: str = "cpu",
+    device: Optional[str] = None,
+    prefill_device: str = "cpu",
+    decode_device: str = "cpu",
     timeout: float = DEFAULT_TIMEOUT,
+    corrupt_frame: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Executes end-to-end multi-process socket cache handoff:
@@ -381,7 +435,12 @@ def run_socket_cache_handoff_experiment(
     2. Consumer listens on OS-assigned port; Producer connects and streams serialized cache (uncompressed or FP8).
     3. Runs uninterrupted baseline in orchestrator for ground-truth comparison.
     4. Evaluates maximum absolute logit error, token match, and byte breakdown.
+    5. Returns decomposed timing metrics (time to first token, handoff duration, gap, decode step latencies).
     """
+    if device is not None:
+        prefill_device = device
+        decode_device = device
+
     ctx = mp.get_context("spawn")
     port_queue = ctx.Queue()
     consumer_result_queue = ctx.Queue()
@@ -398,7 +457,7 @@ def run_socket_cache_handoff_experiment(
         # 1. Start Consumer process with parent-owned temp path
         consumer_proc = ctx.Process(
             target=decode_consumer_worker,
-            args=(port_queue, consumer_result_queue, model_id, decode_steps, device, timeout, temp_logits_path),
+            args=(port_queue, consumer_result_queue, model_id, decode_steps, decode_device, timeout, temp_logits_path),
         )
         consumer_proc.start()
 
@@ -417,10 +476,11 @@ def run_socket_cache_handoff_experiment(
                 prompt,
                 prefill_tp,
                 decode_tp,
-                device,
+                prefill_device,
                 enable_fp8,
                 block_size_tokens,
                 timeout,
+                corrupt_frame,
             ),
         )
         producer_proc.start()
@@ -486,13 +546,15 @@ def run_socket_cache_handoff_experiment(
                 pass
 
     # 3. Run ground-truth baseline in orchestrator
+    torch_base_device = torch.device(decode_device if decode_device != "cpu" else prefill_device)
     tokenizer = AutoTokenizer.from_pretrained(model_id)
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32)
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32).to(torch_base_device)
     model.eval()
 
     inputs = tokenizer(prompt, return_tensors="pt")
+    input_ids = inputs.input_ids.to(torch_base_device)
     with torch.no_grad():
-        out_base = model(input_ids=inputs.input_ids, use_cache=True)
+        out_base = model(input_ids=input_ids, use_cache=True)
         base_cache = out_base.past_key_values
         next_tok = torch.argmax(out_base.logits[:, -1, :], dim=-1, keepdim=True)
 
@@ -545,7 +607,6 @@ def run_socket_cache_handoff_experiment(
     num_layers = len(out_base.past_key_values.layers)
 
     uncomp_fp32_bytes = seq_len * num_kv_heads * head_dim * 4 * num_layers * 2
-    uncomp_fp32_bytes = seq_len * num_kv_heads * head_dim * 4 * num_layers * 2
     uncomp_fp16_bytes = uncomp_fp32_bytes // 2
     wire_bytes = wa["total_wire_bytes"]
     body_bytes = wa["body_bytes"]
@@ -555,11 +616,9 @@ def run_socket_cache_handoff_experiment(
     wire_reduction_vs_fp16_pct = round((1.0 - (body_bytes / max(1, uncomp_fp16_bytes))) * 100.0, 1)
 
     if enable_fp8:
-        # Lossy FP8 pass condition: high cosine similarity >= 0.99 and body compression vs FP32
         divergence_within_tolerance = bool(mean_cos >= 0.99 and body_bytes < uncomp_fp32_bytes)
         tolerance_desc = "Mean Cosine Sim >= 0.99 & Tensor Body Compressed"
     else:
-        # Exact uncompressed pass condition: max abs logit divergence <= 1e-6
         divergence_within_tolerance = bool(max_abs_divergence <= 1e-6)
         tolerance_desc = "|Δ Logits| <= 1e-6"
 
@@ -571,6 +630,24 @@ def run_socket_cache_handoff_experiment(
             "orchestrator_pid": main_pid,
             "producer_pid": producer_pid,
             "consumer_pid": consumer_pid,
+        },
+        "device_placement": {
+            "prefill_device": prefill_device,
+            "decode_device": decode_device,
+        },
+        "codec_telemetry": {
+            "enable_fp8": enable_fp8,
+            "encoding_used": producer_res.get("encoding_used", "float32"),
+            "is_emulated_fallback": producer_res.get("is_emulated_fallback", False),
+            "block_size_tokens": block_size_tokens,
+        },
+        "timing_decomposition": {
+            "time_to_first_emitted_token_ms": producer_res.get("time_to_first_emitted_token_ms", 0.0),
+            "handoff_duration_ms": consumer_res.get("handoff_duration_ms", 0.0),
+            "first_decode_step_latency_ms": consumer_res.get("first_decode_step_latency_ms", 0.0),
+            "inter_token_handoff_gap_ms": consumer_res.get("inter_token_handoff_gap_ms", 0.0),
+            "subsequent_step_latencies_ms": consumer_res.get("subsequent_step_latencies_ms", []),
+            "median_subsequent_latency_ms": consumer_res.get("median_subsequent_latency_ms", 0.0),
         },
         "assigned_port": assigned_port,
         "all_tokens_match": all_tokens_match,
@@ -598,9 +675,26 @@ def run_socket_cache_handoff_experiment(
 @click.option("--steps", "-s", default=4, help="Autoregressive decoding steps.")
 @click.option("--enable-fp8/--no-fp8", default=False, help="Enable block-scaled FP8 KV cache wire compression.")
 @click.option("--block-size", default=16, help="FP8 block tile size.")
+@click.option("--device", default=None, help="Global device placement for both workers (e.g. cpu, mps, cuda:0).")
+@click.option("--prefill-device", default="cpu", help="Device for prefill producer worker.")
+@click.option("--decode-device", default="cpu", help="Device for decode consumer worker.")
 @click.option("--output", "-o", default="benchmarks/socket_cache_handoff.json", help="JSON output path.")
-def main(model: str, prompt: str, steps: int, enable_fp8: bool, block_size: int, output: str):
+def main(
+    model: str,
+    prompt: str,
+    steps: int,
+    enable_fp8: bool,
+    block_size: int,
+    device: Optional[str],
+    prefill_device: str,
+    decode_device: str,
+    output: str,
+):
     """End-to-End Multiprocess Socket KV Cache Transfer Verification."""
+    if device is not None:
+        prefill_device = device
+        decode_device = device
+
     mode_str = "FP8 Block-Quantized" if enable_fp8 else "Uncompressed Exact"
     metric_desc = "Cosine Sim >= 0.99 & Wire Ratio >= 1.4x vs FP16" if enable_fp8 else "Max Absolute Logit Error (|Δ Logits| <= 1e-6)"
     console.print(
@@ -608,7 +702,8 @@ def main(model: str, prompt: str, steps: int, enable_fp8: bool, block_size: int,
             f"[bold cyan]Process-to-Process Socket KV Cache Transfer Verification[/bold cyan]\n"
             f"Target Model: {model} | Prefill TP=2 -> Decode TP=1\n"
             f"Mode: {mode_str} (Block Size: {block_size})\n"
-            f"Transport: Localhost TCP Socket (127.0.0.1:OS-assigned)\n"
+            f"Placement: Prefill={prefill_device} -> Decode={decode_device}\n"
+            f"Transport: Localhost TCP Socket with CPU Staging (127.0.0.1:OS-assigned)\n"
             f"Workers: Distinct OS processes spawned via multiprocessing (get_context('spawn'))\n"
             f"Pass Criteria: {metric_desc}",
             border_style="cyan",
@@ -621,12 +716,18 @@ def main(model: str, prompt: str, steps: int, enable_fp8: bool, block_size: int,
         decode_steps=steps,
         enable_fp8=enable_fp8,
         block_size_tokens=block_size,
+        prefill_device=prefill_device,
+        decode_device=decode_device,
     )
 
     pids = results["pids"]
+    codec_info = results["codec_telemetry"]
+    timing = results["timing_decomposition"]
+
     console.print(
         f"[dim]Process Topology: Orchestrator PID={pids['orchestrator_pid']} | "
-        f"Producer PID={pids['producer_pid']} | Consumer PID={pids['consumer_pid']} | "
+        f"Producer PID={pids['producer_pid']} ({prefill_device}) | "
+        f"Consumer PID={pids['consumer_pid']} ({decode_device}) | "
         f"Socket Port={results['assigned_port']}[/dim]\n"
     )
 
@@ -653,9 +754,20 @@ def main(model: str, prompt: str, steps: int, enable_fp8: bool, block_size: int,
 
     wa = results["wire_accounting"]
     summary_panel = Panel(
-        f"[bold]Process Verification:[/bold]\n"
+        f"[bold]Process Verification & Placement:[/bold]\n"
         f"  Distinct Process Isolation: [bold green]CONFIRMED[/bold green] (3 distinct PIDs)\n"
-        f"  Cache Transferred Over Socket: [bold green]YES[/bold green] (No shared memory tensor handoff)\n\n"
+        f"  Prefill Worker Placement:   {prefill_device}\n"
+        f"  Decode Worker Placement:    {decode_device}\n"
+        f"  Transport Mechanism:        Localhost TCP with CPU staging (socket buffer & timeout control)\n\n"
+        f"[bold]Wire Codec Telemetry:[/bold]\n"
+        f"  Requested Mode:             {mode_str}\n"
+        f"  Encoding Used on Wire:      [bold yellow]{codec_info['encoding_used']}[/bold yellow]\n"
+        f"  Fallback Status:            {'[italic yellow]Emulated Fallback (Non-native FP8 HW)[/italic yellow]' if codec_info['is_emulated_fallback'] else '[bold green]Direct Native Support[/bold green]'}\n\n"
+        f"[bold]Disaggregated Serving Latency Decomposition:[/bold]\n"
+        f"  T_first_token (Prefill Token 0):       {timing['time_to_first_emitted_token_ms']:.2f} ms (Emitted directly by prefill worker)\n"
+        f"  T_handoff (Transfer & Deserialization): {timing['handoff_duration_ms']:.2f} ms (Socket read, framing check, reconstruction)\n"
+        f"  ΔT_gap (Stall Before Token 1):          {timing['inter_token_handoff_gap_ms']:.2f} ms (T_handoff + first consumer step)\n"
+        f"  T_decode (Subsequent Step Median):      {timing['median_subsequent_latency_ms']:.2f} ms (Per continuation token)\n\n"
         f"[bold]Numerical Equivalence:[/bold]\n"
         f"  Max Absolute Logit Error: [bold green]{results['max_abs_logit_divergence']:.2e}[/bold green] (Tolerance: <= 1e-6)\n"
         f"  Tokens Match: {'[bold green]100% EXACT[/bold green]' if results['all_tokens_match'] else '[bold red]FAILED[/bold red]'}\n\n"
@@ -682,3 +794,4 @@ def main(model: str, prompt: str, steps: int, enable_fp8: bool, block_size: int,
 
 if __name__ == "__main__":
     main()
+

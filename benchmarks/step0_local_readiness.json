@@ -1,0 +1,99 @@
+{
+  "timestamp": "2026-10-23T15:46:05Z",
+  "environment": {
+    "os": "Darwin",
+    "os_release": "25.5.0",
+    "arch": "arm64",
+    "python_version": "3.12.8",
+    "torch_version": "2.10.0",
+    "cuda_available": false,
+    "cuda_devices": [],
+    "mps_available": true,
+    "native_fp8_dtype_available": true,
+    "default_device": "mps"
+  },
+  "wire_codec_validation": {
+    "encoding_used": "float8_e4m3fn",
+    "is_emulated_fallback": false,
+    "encode_duration_ms": 3.932874999009073,
+    "decode_duration_ms": 0.22650003666058183,
+    "max_abs_error": 0.1434929370880127,
+    "cosine_similarity": 0.9996365308761597,
+    "note": "Wire codec tests scaling, packing, socket streaming, and reconstruction. It does NOT establish FP8 Tensor Core GEMM acceleration (e.g. Ampere lacks native FP8 compute).",
+    "acceleration_note": "Identifies wire encoding used. On this CPU/host run, it does NOT demonstrate native GPU FP8 acceleration."
+  },
+  "uncompressed_handoff": {
+    "status": "PASS",
+    "all_tokens_match": true,
+    "max_abs_logit_divergence": 0.0,
+    "timing_decomposition": {
+      "time_to_first_emitted_token_ms": 943.2771250139922,
+      "handoff_duration_ms": 4.599292005877942,
+      "first_decode_step_latency_ms": 191.17729202844203,
+      "inter_token_handoff_gap_ms": 195.77658403431997,
+      "subsequent_step_latencies_ms": [
+        69.9069169932045
+      ],
+      "median_subsequent_latency_ms": 69.9069169932045
+    },
+    "wire_accounting": {
+      "framing_bytes": 776,
+      "metadata_bytes": 34525,
+      "body_bytes": 172032,
+      "total_wire_bytes": 207333,
+      "uncompressed_fp32_bytes": 172032,
+      "uncompressed_fp16_bytes": 86016,
+      "ratio_vs_fp32": 1.0,
+      "ratio_vs_fp16": 0.5,
+      "wire_reduction_vs_fp16_pct": -100.0
+    },
+    "codec_telemetry": {
+      "enable_fp8": false,
+      "encoding_used": "float32",
+      "is_emulated_fallback": false,
+      "block_size_tokens": 16
+    }
+  },
+  "fp8_handoff": {
+    "handoff_correctness_status": "PASS",
+    "compression_benefit_status": "EXPANSION (0.87x vs FP16; expected for short 11-token prompts below break-even threshold)",
+    "all_tokens_match": true,
+    "mean_cosine_similarity": 0.999464,
+    "timing_decomposition": {
+      "time_to_first_emitted_token_ms": 804.2499159928411,
+      "handoff_duration_ms": 6.974792049732059,
+      "first_decode_step_latency_ms": 165.6885829870589,
+      "inter_token_handoff_gap_ms": 172.66337503679097,
+      "subsequent_step_latencies_ms": [
+        68.61600000411272
+      ],
+      "median_subsequent_latency_ms": 68.61600000411272
+    },
+    "wire_accounting": {
+      "framing_bytes": 776,
+      "metadata_bytes": 36156,
+      "body_bytes": 98688,
+      "total_wire_bytes": 135620,
+      "uncompressed_fp32_bytes": 172032,
+      "uncompressed_fp16_bytes": 86016,
+      "ratio_vs_fp32": 1.74,
+      "ratio_vs_fp16": 0.87,
+      "wire_reduction_vs_fp16_pct": -14.7
+    },
+    "codec_telemetry": {
+      "enable_fp8": true,
+      "encoding_used": "float8_e4m3fn",
+      "is_emulated_fallback": false,
+      "block_size_tokens": 16,
+      "note": "float8_e4m3fn wire format. Software CPU simulation; does NOT establish native GPU FP8 acceleration."
+    }
+  },
+  "cleanup_status": {
+    "exercised_through_failure_path": true,
+    "failure_cleanup_verified": true,
+    "all_child_processes_reaped": true,
+    "temporary_files_deleted": true,
+    "sockets_closed": true
+  },
+  "step0_ready_for_gpu_rental": true
+}

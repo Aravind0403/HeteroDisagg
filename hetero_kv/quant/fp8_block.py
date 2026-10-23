@@ -114,8 +114,8 @@ def dequantize_kv_block_fp8(payload: FP8BlockPayload) -> torch.Tensor:
     """
     quantized = payload.quantized_data
     scale_factors = payload.scale_factors.unsqueeze(-1)
-
-    if quantized.dtype == torch.float8_e4m3fn:
+    f8_dtype = getattr(torch, "float8_e4m3fn", None)
+    if f8_dtype is not None and quantized.dtype == f8_dtype:
         dequantized = quantized.to(torch.float32) * scale_factors
     else:
         # Dequantize from int8 fallback
