@@ -1,20 +1,22 @@
 {
-  "timestamp": "2026-10-23T15:31:28Z",
+  "timestamp": "2026-10-23T15:59:43Z",
   "hardware_telemetry": {
-    "device_str": "mps",
-    "device_type": "mps",
-    "os": "Darwin",
-    "arch": "arm64",
-    "python_version": "3.12.8",
-    "torch_version": "2.10.0",
-    "cuda_available": false,
-    "mps_available": true,
+    "device_str": "cuda:0",
+    "device_type": "cuda",
+    "os": "Linux",
+    "arch": "x86_64",
+    "python_version": "3.11.9",
+    "torch_version": "2.4.0",
+    "cuda_available": true,
+    "mps_available": false,
     "software_fp8_dtype_available": true,
-    "gpu_name": "Apple Silicon (mps)",
-    "compute_capability": "N/A",
-    "architecture_family": "Apple Silicon Unified Memory",
-    "native_fp8_gemm_support": false,
-    "architecture_notes": "Non-CUDA device; tests wire codec packing and software dequantization."
+    "cuda_device_index": 0,
+    "gpu_name": "NVIDIA GeForce RTX 4090",
+    "total_memory_gb": 23.52,
+    "compute_capability": "8.9",
+    "architecture_family": "Ada Lovelace (cc 8.9)",
+    "native_fp8_gemm_support": true,
+    "architecture_notes": "Native FP8 Tensor Core compute supported (e.g. L40, RTX 4090)."
   },
   "gpu_codec_microbenchmarks": [
     {
@@ -25,13 +27,13 @@
         8,
         128
       ],
-      "encoding_used": "int8",
-      "is_emulated_fallback": true,
-      "quant_duration_ms": 0.227,
-      "dequant_duration_ms": 0.228,
-      "total_codec_overhead_ms": 0.454,
-      "cosine_similarity": 0.999957,
-      "max_abs_error": 0.01767309010028839,
+      "encoding_used": "float8_e4m3fn",
+      "is_emulated_fallback": false,
+      "quant_duration_ms": 0.061,
+      "dequant_duration_ms": 0.031,
+      "total_codec_overhead_ms": 0.091,
+      "cosine_similarity": 0.999649,
+      "max_abs_error": 0.171875,
       "uncompressed_fp16_bytes": 262144,
       "wire_payload_bytes": 131104,
       "ratio_vs_fp16": 2.0
@@ -44,13 +46,13 @@
         8,
         128
       ],
-      "encoding_used": "int8",
-      "is_emulated_fallback": true,
-      "quant_duration_ms": 0.207,
-      "dequant_duration_ms": 0.065,
-      "total_codec_overhead_ms": 0.272,
-      "cosine_similarity": 0.999957,
-      "max_abs_error": 0.01982414722442627,
+      "encoding_used": "float8_e4m3fn",
+      "is_emulated_fallback": false,
+      "quant_duration_ms": 0.06,
+      "dequant_duration_ms": 0.028,
+      "total_codec_overhead_ms": 0.088,
+      "cosine_similarity": 0.999649,
+      "max_abs_error": 0.166015625,
       "uncompressed_fp16_bytes": 1048576,
       "wire_payload_bytes": 524416,
       "ratio_vs_fp16": 2.0
@@ -63,13 +65,13 @@
         8,
         128
       ],
-      "encoding_used": "int8",
-      "is_emulated_fallback": true,
-      "quant_duration_ms": 0.172,
-      "dequant_duration_ms": 0.058,
-      "total_codec_overhead_ms": 0.23,
-      "cosine_similarity": 0.999956,
-      "max_abs_error": 0.019516050815582275,
+      "encoding_used": "float8_e4m3fn",
+      "is_emulated_fallback": false,
+      "quant_duration_ms": 0.057,
+      "dequant_duration_ms": 0.028,
+      "total_codec_overhead_ms": 0.084,
+      "cosine_similarity": 0.99965,
+      "max_abs_error": 0.181640625,
       "uncompressed_fp16_bytes": 2097152,
       "wire_payload_bytes": 1048832,
       "ratio_vs_fp16": 2.0
@@ -82,13 +84,13 @@
         8,
         128
       ],
-      "encoding_used": "int8",
-      "is_emulated_fallback": true,
-      "quant_duration_ms": 0.207,
-      "dequant_duration_ms": 0.084,
-      "total_codec_overhead_ms": 0.291,
-      "cosine_similarity": 0.999957,
-      "max_abs_error": 0.01865779608488083,
+      "encoding_used": "float8_e4m3fn",
+      "is_emulated_fallback": false,
+      "quant_duration_ms": 0.057,
+      "dequant_duration_ms": 0.028,
+      "total_codec_overhead_ms": 0.084,
+      "cosine_similarity": 0.99965,
+      "max_abs_error": 0.19140625,
       "uncompressed_fp16_bytes": 4194304,
       "wire_payload_bytes": 2097664,
       "ratio_vs_fp16": 2.0
@@ -102,11 +104,11 @@
     "modes": {
       "uncompressed_exact": {
         "status": "PASS",
-        "encoding_used": "float32",
+        "encoding_used": "float16",
         "is_emulated_fallback": false,
         "tokens_match": true,
         "max_abs_logit_error": 0.0,
-        "mean_cosine_similarity": 1.000008,
+        "mean_cosine_similarity": 0.999989,
         "generated_tokens": [
           279,
           15279,
@@ -115,20 +117,20 @@
         ],
         "generated_text": " the parallelism of",
         "timing_decomposition": {
-          "time_to_first_token_ms": 182.42,
-          "codec_handoff_duration_ms": 2.49,
-          "first_decode_step_latency_ms": 27.2,
-          "inter_token_handoff_gap_ms": 29.69,
-          "median_subsequent_latency_ms": 26.56
+          "time_to_first_token_ms": 221.16,
+          "codec_handoff_duration_ms": 2.55,
+          "first_decode_step_latency_ms": 13.22,
+          "inter_token_handoff_gap_ms": 15.77,
+          "median_subsequent_latency_ms": 13.18
         }
       },
       "fp8_wire_codec": {
         "status": "PASS",
-        "encoding_used": "int8",
-        "is_emulated_fallback": true,
+        "encoding_used": "float8_e4m3fn",
+        "is_emulated_fallback": false,
         "tokens_match": true,
-        "max_abs_logit_error": 0.3279224634170532,
-        "mean_cosine_similarity": 0.999825,
+        "max_abs_logit_error": 0.478515625,
+        "mean_cosine_similarity": 0.999688,
         "generated_tokens": [
           279,
           15279,
@@ -137,11 +139,11 @@
         ],
         "generated_text": " the parallelism of",
         "timing_decomposition": {
-          "time_to_first_token_ms": 182.42,
-          "codec_handoff_duration_ms": 329.71,
-          "first_decode_step_latency_ms": 33.08,
-          "inter_token_handoff_gap_ms": 362.79,
-          "median_subsequent_latency_ms": 25.12
+          "time_to_first_token_ms": 221.16,
+          "codec_handoff_duration_ms": 16.55,
+          "first_decode_step_latency_ms": 13.21,
+          "inter_token_handoff_gap_ms": 29.76,
+          "median_subsequent_latency_ms": 13.03
         }
       }
     }
