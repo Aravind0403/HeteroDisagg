@@ -170,7 +170,7 @@ def _decode_consumer_worker_proc(
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            dtype=torch.float16 if torch_device.type == "cuda" else torch.float32,
+            torch_dtype=torch.float16 if torch_device.type == "cuda" else torch.float32,
         )
         model.to(torch_device)
         model.eval()
@@ -323,7 +323,7 @@ def _prefill_producer_worker_proc(
     try:
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         target_dtype = torch.float16 if torch_device.type == "cuda" else torch.float32
-        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=target_dtype)
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=target_dtype)
         model.to(torch_device)
         model.eval()
 
@@ -609,7 +609,7 @@ def run_baseline_and_ablation(
     target_dtype = torch.float16 if torch_device.type == "cuda" else torch.float32
 
     tokenizer = AutoTokenizer.from_pretrained(model_id)
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=target_dtype)
+    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=target_dtype)
     model.to(torch_device)
     model.eval()
 
