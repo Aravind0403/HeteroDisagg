@@ -936,12 +936,17 @@ def test_process_and_resource_cleanup_on_injected_failure():
     1. Injects an intentional failure (body length mismatch).
     2. Proves run_socket_cache_handoff_experiment raises RuntimeError.
     3. Confirms that no temporary logits files leak in the filesystem.
+    4. Asserts all child processes are reaped and verified dead via OS signal checks.
     """
     import glob
     import tempfile
+    from hetero_kv.lifecycle import verify_pid_dead
 
     temp_dir = tempfile.gettempdir()
     initial_temp_files = set(glob.glob(os.path.join(temp_dir, f"hkv_logits_{os.getpid()}_*.pt")))
+
+    # Track children before and after
+    children_before = set(mp.active_children())
 
     with pytest.raises(RuntimeError, match="(Producer failed|Consumer failed)"):
         run_socket_cache_handoff_experiment(
@@ -954,6 +959,12 @@ def test_process_and_resource_cleanup_on_injected_failure():
             timeout=10.0,
             corrupt_frame="body_length_mismatch",
         )
+
+    # Verify no surviving children from this test run
+    surviving_children = set(mp.active_children()) - children_before
+    for child in surviving_children:
+        assert verify_pid_dead(child.pid), f"Child PID {child.pid} leaked and is still alive!"
+    assert len(surviving_children) == 0, f"Found surviving child processes: {surviving_children}"
 
     final_temp_files = set(glob.glob(os.path.join(temp_dir, f"hkv_logits_{os.getpid()}_*.pt")))
     assert final_temp_files == initial_temp_files, f"Leaked temp files: {final_temp_files - initial_temp_files}"

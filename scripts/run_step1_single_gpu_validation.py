@@ -453,15 +453,39 @@ def run_step1_suite(
         decode_steps=4,
     )
 
+    import math
+
+    is_cuda = bool(hw_info["cuda_available"] and hw_info["device_type"] == "cuda")
+    uncomp_mode = model_results["modes"]["uncompressed_exact"]
+    fp8_mode = model_results["modes"]["fp8_wire_codec"]
+
+    uncomp_ok = bool(
+        uncomp_mode["tokens_match"]
+        and (uncomp_mode["max_abs_logit_error"] <= 1e-5)
+        and math.isfinite(uncomp_mode["max_abs_logit_error"])
+    )
+    fp8_ok = bool(
+        fp8_mode["tokens_match"]
+        and (fp8_mode["mean_cosine_similarity"] >= 0.999)
+        and math.isfinite(fp8_mode["mean_cosine_similarity"])
+    )
+
+    pipeline_correctness_passed = bool(uncomp_ok and fp8_ok)
+    gpu_milestone_passed = bool(is_cuda and pipeline_correctness_passed)
+
     payload = {
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "hardware_telemetry": hw_info,
         "gpu_codec_microbenchmarks": micro_results,
         "real_model_cache_handoff": model_results,
-        "step1_completion_status": (
-            model_results["modes"]["uncompressed_exact"]["status"] == "PASS" and
-            model_results["modes"]["fp8_wire_codec"]["status"] == "PASS"
-        ),
+        "completion_criteria": {
+            "is_cuda_device": is_cuda,
+            "uncompressed_correctness": uncomp_ok,
+            "fp8_correctness": fp8_ok,
+            "pipeline_correctness_passed": pipeline_correctness_passed,
+            "gpu_milestone_passed": gpu_milestone_passed,
+        },
+        "step1_completion_status": gpu_milestone_passed,
     }
 
     out = Path(output_path)
@@ -476,18 +500,24 @@ def run_step1_suite(
 @click.option("--device", "-d", default=None, help="Target device (e.g. cuda:0, mps, cpu). Default auto-detects.")
 @click.option("--model", "-m", default="Qwen/Qwen2.5-0.5B-Instruct", help="Model ID.")
 @click.option("--output", "-o", default="benchmarks/step1_single_gpu_validation.json", help="Artifact output JSON.")
-def main(device: Optional[str], model: str, output: str):
+@click.option("--allow-emulation/--require-cuda", default=False, help="Allow emulation on CPU/MPS without failing CLI exit.")
+def main(device: Optional[str], model: str, output: str, allow_emulation: bool):
     res = run_step1_suite(device_str=device, model_id=model, output_path=output)
 
     hw = res["hardware_telemetry"]
     m_res = res["real_model_cache_handoff"]["modes"]
+    crit = res["completion_criteria"]
 
     table = Table(title="Step 1 Single-GPU Validation Summary", header_style="bold magenta")
     table.add_column("Evaluation Component", style="cyan")
     table.add_column("Observed Metric / Telemetry", style="white")
     table.add_column("Status", justify="center")
 
-    table.add_row("Device & Architecture", f"{hw['gpu_name']} | {hw['architecture_family']}", "[green]PASS[/green]")
+    table.add_row(
+        "Device & Architecture",
+        f"{hw['gpu_name']} | {hw['architecture_family']}",
+        "[green]PASS (CUDA)[/green]" if crit["is_cuda_device"] else "[yellow]EMULATION (Non-CUDA)[/yellow]"
+    )
     table.add_row("FP8 Scope Declaration", "Wire codec tested; Tensor Core GEMM decoupled", "[green]PASS[/green]")
 
     uncomp = m_res["uncompressed_exact"]
@@ -496,12 +526,12 @@ def main(device: Optional[str], model: str, output: str):
     table.add_row(
         "Uncompressed Real Model Handoff",
         f"Max |Δ Logit|: {uncomp['max_abs_logit_error']:.2e} | Tokens 100% Match",
-        f"[green]{uncomp['status']}[/green]"
+        f"[green]PASS[/green]" if crit["uncompressed_correctness"] else "[red]FAIL[/red]"
     )
     table.add_row(
         "FP8 Wire Codec Real Model Handoff",
         f"Cos Sim: {fp8['mean_cosine_similarity']:.6f} | Wire Encoding: {fp8['encoding_used']} (Fallback={fp8['is_emulated_fallback']})",
-        f"[green]{fp8['status']}[/green]"
+        f"[green]PASS[/green]" if crit["fp8_correctness"] else "[red]FAIL[/red]"
     )
 
     t_fp8 = fp8["timing_decomposition"]
@@ -512,12 +542,28 @@ def main(device: Optional[str], model: str, output: str):
     )
 
     console.print(table)
-    console.print(Panel(
-        f"[bold green]Step 1 Suite Complete![/bold green]\n"
-        f"Artifact saved to [bold cyan]{output}[/bold cyan]\n"
-        f"Architecture distinction & wire encoding verified without false FP8 Tensor Core acceleration claims.",
-        border_style="green"
-    ))
+
+    if crit["gpu_milestone_passed"]:
+        console.print(Panel(
+            f"[bold green]Step 1 Physical GPU Milestone Complete![/bold green]\n"
+            f"Artifact saved to [bold cyan]{output}[/bold cyan]\n"
+            f"Physical CUDA hardware confirmed, tolerances verified.",
+            border_style="green"
+        ))
+    elif allow_emulation and crit["pipeline_correctness_passed"]:
+        console.print(Panel(
+            f"[bold yellow]Step 1 Pipeline Verified (Emulation Mode)[/bold yellow]\n"
+            f"Artifact saved to [bold cyan]{output}[/bold cyan]\n"
+            f"Note: Running on {hw['device_type']}; physical GPU milestone requires a CUDA device.",
+            border_style="yellow"
+        ))
+    else:
+        console.print(Panel(
+            f"[bold red]Step 1 Validation FAILED.[/bold red]\n"
+            f"Artifact saved to [bold cyan]{output}[/bold cyan] for diagnostics.",
+            border_style="red"
+        ))
+        sys.exit(1)
 
 
 if __name__ == "__main__":

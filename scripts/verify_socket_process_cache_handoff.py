@@ -36,6 +36,7 @@ from rich.panel import Panel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.cache_utils import DynamicCache
 
+from hetero_kv.lifecycle import safe_cleanup_processes, verify_pid_dead
 from hetero_kv.layout import KVPartitionPlan
 from hetero_kv.reshard import slice_kv_for_prefill_rank
 from hetero_kv.transport import (
@@ -76,15 +77,23 @@ def decode_consumer_worker(
     """
     consumer_pid = os.getpid()
     torch_device = torch.device(device)
+    # 1. Pre-warm: Load model onto target decode device BEFORE signaling readiness
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id,
+        torch_dtype=torch.float16 if torch_device.type == "cuda" else torch.float32,
+    )
+    model.to(torch_device)
+    model.eval()
+
     server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_sock.bind(("127.0.0.1", 0))
     assigned_port = server_sock.getsockname()[1]
     server_sock.listen(1)
-    # Generous timeout for accept while producer initializes
     server_sock.settimeout(timeout + 30)
 
-    # Signal readiness to orchestrator
+    # Signal readiness to orchestrator after model is warmed
     port_queue.put({"port": assigned_port, "pid": consumer_pid})
 
     conn: Optional[socket.socket] = None
@@ -94,15 +103,9 @@ def decode_consumer_worker(
         conn, addr = server_sock.accept()
         conn.settimeout(timeout)
 
-        # 1. Load local model to inspect config and run decoding on target device
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32)
-        model.to(torch_device)
-        model.eval()
-
         if torch_device.type == "cuda":
             torch.cuda.synchronize(torch_device)
-        t_handoff_start = time.perf_counter()
+        t_receiver_wire_start = time.monotonic()
 
         # 2. Receive and validate request manifest against consumer's expected model config
         manifest, manifest_acc = recv_manifest(conn, timeout=timeout)
@@ -132,18 +135,19 @@ def decode_consumer_worker(
         raw_cache_dict = accumulator.reconstruct_cache()
 
         # 5. Populate cache on target device
+        target_dtype = torch.float16 if torch_device.type == "cuda" else torch.float32
         reconstructed_cache = DynamicCache()
         for l in range(manifest.num_layers):
             reconstructed_cache.update(
-                raw_cache_dict["keys"][l].to(torch_device),
-                raw_cache_dict["values"][l].to(torch_device),
+                raw_cache_dict["keys"][l].to(device=torch_device, dtype=target_dtype),
+                raw_cache_dict["values"][l].to(device=torch_device, dtype=target_dtype),
                 layer_idx=l,
             )
 
         if torch_device.type == "cuda":
             torch.cuda.synchronize(torch_device)
-        t_handoff_end = time.perf_counter()
-        handoff_duration_ms = (t_handoff_end - t_handoff_start) * 1000.0
+        t_consumer_cache_ready = time.monotonic()
+        receiver_reconstruction_duration_ms = (t_consumer_cache_ready - t_receiver_wire_start) * 1000.0
 
         # 6. Decode continuation tokens measuring per-token step durations
         curr_cache = reconstructed_cache
@@ -152,10 +156,12 @@ def decode_consumer_worker(
         step_logits_list: List[torch.Tensor] = []
         step_durations_ms: List[float] = []
 
+        t_consumer_token_ready: Optional[float] = None
+
         for step in range(decode_steps):
             if torch_device.type == "cuda":
                 torch.cuda.synchronize(torch_device)
-            t_s = time.perf_counter()
+            t_s = time.monotonic()
             with torch.no_grad():
                 out = model(input_ids=curr_token, past_key_values=curr_cache, use_cache=True)
                 logits = out.logits[:, -1, :]
@@ -167,7 +173,9 @@ def decode_consumer_worker(
                 step_logits_list.append(logits[0].cpu())
             if torch_device.type == "cuda":
                 torch.cuda.synchronize(torch_device)
-            t_e = time.perf_counter()
+            t_e = time.monotonic()
+            if step == 0:
+                t_consumer_token_ready = t_e
             step_durations_ms.append((t_e - t_s) * 1000.0)
 
         first_decode_step_latency_ms = step_durations_ms[0] if step_durations_ms else 0.0
@@ -177,7 +185,6 @@ def decode_consumer_worker(
             if subsequent_step_latencies_ms
             else first_decode_step_latency_ms
         )
-        inter_token_handoff_gap_ms = handoff_duration_ms + first_decode_step_latency_ms
 
         generated_text = tokenizer.decode(generated_tokens)
         stacked_logits = torch.stack(step_logits_list, dim=0)  # [steps, vocab_size]
@@ -198,9 +205,11 @@ def decode_consumer_worker(
                 "generated_tokens": generated_tokens,
                 "generated_text": generated_text,
                 "temp_logits_path": temp_logits_path,
-                "handoff_duration_ms": handoff_duration_ms,
+                "t_receiver_wire_start": t_receiver_wire_start,
+                "t_consumer_cache_ready": t_consumer_cache_ready,
+                "t_consumer_token_ready": t_consumer_token_ready,
+                "receiver_reconstruction_duration_ms": receiver_reconstruction_duration_ms,
                 "first_decode_step_latency_ms": first_decode_step_latency_ms,
-                "inter_token_handoff_gap_ms": inter_token_handoff_gap_ms,
                 "subsequent_step_latencies_ms": subsequent_step_latencies_ms,
                 "median_subsequent_latency_ms": median_subsequent_latency_ms,
             }
@@ -239,6 +248,7 @@ def prefill_producer_worker(
     block_size_tokens: int = 16,
     timeout: float = DEFAULT_TIMEOUT,
     corrupt_frame: Optional[str] = None,
+    injected_pre_send_delay_s: float = 0.0,
 ) -> None:
     """
     Producer Process (Worker A):
@@ -246,7 +256,7 @@ def prefill_producer_worker(
     2. Slices and packages KV cache across prefill TP ranks.
     3. Connects to decode worker socket at 127.0.0.1:target_port (with retry).
     4. Transmits RequestManifest followed by all partitioned frames.
-    5. Cleanly closes socket and returns telemetry.
+    5. Cleanly closes socket and returns telemetry with host monotonic timestamps.
     """
     producer_pid = os.getpid()
     client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -256,7 +266,8 @@ def prefill_producer_worker(
         torch_device = torch.device(device)
         # Load model and run prefill
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32).to(torch_device)
+        target_dtype = torch.float16 if torch_device.type == "cuda" else torch.float32
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=target_dtype).to(torch_device)
         model.eval()
 
         inputs = tokenizer(prompt, return_tensors="pt")
@@ -265,7 +276,7 @@ def prefill_producer_worker(
 
         if torch_device.type == "cuda":
             torch.cuda.synchronize(torch_device)
-        t_prefill_start = time.perf_counter()
+        t_prefill_start = time.monotonic()
         with torch.no_grad():
             out_prefill = model(input_ids=input_ids, use_cache=True)
             prefill_cache = out_prefill.past_key_values
@@ -273,10 +284,22 @@ def prefill_producer_worker(
             initial_token_str = tokenizer.decode([initial_next_token])
         if torch_device.type == "cuda":
             torch.cuda.synchronize(torch_device)
-        t_prefill_end = time.perf_counter()
-        time_to_first_emitted_token_ms = (t_prefill_end - t_prefill_start) * 1000.0
+        t_producer_token_ready = time.monotonic()
+        time_to_first_token_ready_ms = (t_producer_token_ready - t_prefill_start) * 1000.0
 
-        num_layers = len(prefill_cache.layers)
+        if injected_pre_send_delay_s > 0:
+            time.sleep(injected_pre_send_delay_s)
+
+        t_sender_wire_start = time.monotonic()
+
+        # Robust extraction across transformers cache representations
+        if hasattr(prefill_cache, "layers"):
+            num_layers = len(prefill_cache.layers)
+        elif hasattr(prefill_cache, "key_cache"):
+            num_layers = len(prefill_cache.key_cache)
+        else:
+            num_layers = len(prefill_cache)
+
         num_kv_heads = getattr(model.config, "num_key_value_heads", model.config.num_attention_heads)
         head_dim = model.config.hidden_size // model.config.num_attention_heads
         seq_len = input_ids.shape[1]
@@ -310,7 +333,7 @@ def prefill_producer_worker(
             initial_decode_token=initial_next_token,
             initial_decode_token_str=initial_token_str,
             prompt_tokens=prompt_tokens,
-            dtype="float32",
+            dtype="float16" if torch_device.type == "cuda" else "float32",
             enable_fp8=enable_fp8,
             block_size_tokens=block_size_tokens,
             decode_rank=0,
@@ -318,13 +341,20 @@ def prefill_producer_worker(
 
         acc = send_manifest(client_sock, manifest)
 
-        encoding_used = "float32"
+        encoding_used = "float16" if torch_device.type == "cuda" else "float32"
         is_emulated_fallback = False
 
         # Transmit all frames
         for l in range(num_layers):
-            orig_k = prefill_cache.layers[l].keys
-            orig_v = prefill_cache.layers[l].values
+            if hasattr(prefill_cache, "layers"):
+                orig_k = prefill_cache.layers[l].keys
+                orig_v = prefill_cache.layers[l].values
+            elif hasattr(prefill_cache, "key_cache"):
+                orig_k = prefill_cache.key_cache[l]
+                orig_v = prefill_cache.value_cache[l]
+            else:
+                orig_k = prefill_cache[l][0]
+                orig_v = prefill_cache[l][1]
 
             k_hetero = orig_k.permute(0, 2, 1, 3).contiguous()
             v_hetero = orig_v.permute(0, 2, 1, 3).contiguous()
@@ -361,7 +391,7 @@ def prefill_producer_worker(
                             scale_shape=list(compressed.scale_factors.shape),
                             scale_dtype="float32",
                             original_shape=list(compressed.original_shape),
-                            original_dtype="float32",
+                            original_dtype="float16" if torch_device.type == "cuda" else "float32",
                             block_size_tokens=compressed.block_size_tokens,
                             body_bytes=len(body) if corrupt_frame != "body_length_mismatch" else len(body) * 2,
                         )
@@ -380,11 +410,15 @@ def prefill_producer_worker(
                             end_head_idx=h_slice.end_head_idx,
                             is_quantized=False,
                             shape=list(shard.shape),
-                            dtype="float32",
+                            dtype="float16" if torch_device.type == "cuda" else "float32",
                             body_bytes=len(body) if corrupt_frame != "body_length_mismatch" else len(body) * 2,
                         )
                     frame_acc = send_frame(client_sock, meta, body)
                     acc = acc.add(frame_acc)
+
+        if torch_device.type == "cuda":
+            torch.cuda.synchronize(torch_device)
+        t_sender_wire_end = time.monotonic()
 
         result_queue.put(
             {
@@ -392,7 +426,10 @@ def prefill_producer_worker(
                 "producer_pid": producer_pid,
                 "initial_token": initial_next_token,
                 "initial_token_str": initial_token_str,
-                "time_to_first_emitted_token_ms": time_to_first_emitted_token_ms,
+                "time_to_first_token_ready_ms": time_to_first_token_ready_ms,
+                "t_producer_token_ready": t_producer_token_ready,
+                "t_sender_wire_start": t_sender_wire_start,
+                "t_sender_wire_end": t_sender_wire_end,
                 "encoding_used": encoding_used,
                 "is_emulated_fallback": is_emulated_fallback,
                 "total_wire_bytes": acc.total_wire_bytes,
@@ -428,14 +465,15 @@ def run_socket_cache_handoff_experiment(
     decode_device: str = "cpu",
     timeout: float = DEFAULT_TIMEOUT,
     corrupt_frame: Optional[str] = None,
+    injected_pre_send_delay_s: float = 0.0,
 ) -> Dict[str, Any]:
     """
     Executes end-to-end multi-process socket cache handoff:
     1. Spawns Producer and Consumer in separate OS processes via multiprocessing ("spawn").
-    2. Consumer listens on OS-assigned port; Producer connects and streams serialized cache (uncompressed or FP8).
+    2. Consumer pre-warms its model, then listens on OS-assigned port; Producer connects and streams cache.
     3. Runs uninterrupted baseline in orchestrator for ground-truth comparison.
     4. Evaluates maximum absolute logit error, token match, and byte breakdown.
-    5. Returns decomposed timing metrics (time to first token, handoff duration, gap, decode step latencies).
+    5. Returns decomposed timing metrics measured from true monotonic clock events.
     """
     if device is not None:
         prefill_device = device
@@ -452,6 +490,9 @@ def run_socket_cache_handoff_experiment(
 
     consumer_proc: Optional[mp.Process] = None
     producer_proc: Optional[mp.Process] = None
+    producer_pid: Optional[int] = None
+    consumer_pid: Optional[int] = None
+    cleanup_observed: Dict[str, Any] = {}
 
     try:
         # 1. Start Consumer process with parent-owned temp path
@@ -462,7 +503,7 @@ def run_socket_cache_handoff_experiment(
         consumer_proc.start()
 
         # Wait for consumer readiness and assigned port
-        ready_info = port_queue.get(timeout=timeout)
+        ready_info = port_queue.get(timeout=timeout + 30)
         assigned_port = ready_info["port"]
         consumer_pid = ready_info["pid"]
 
@@ -481,6 +522,7 @@ def run_socket_cache_handoff_experiment(
                 block_size_tokens,
                 timeout,
                 corrupt_frame,
+                injected_pre_send_delay_s,
             ),
         )
         producer_proc.start()
@@ -509,46 +551,20 @@ def run_socket_cache_handoff_experiment(
         # Load consumer logits from temp file
         consumer_logits_tensor = torch.load(temp_logits_path, weights_only=True)
     finally:
-        # Guarantee child-process termination and join on all exit paths (success, error, or timeout)
-        if producer_proc is not None:
-            try:
-                if producer_proc.is_alive():
-                    producer_proc.terminate()
-                producer_proc.join(timeout=2.0)
-                if producer_proc.is_alive():
-                    producer_proc.kill()
-                    producer_proc.join(timeout=1.0)
-            except Exception:
-                pass
-
-        if consumer_proc is not None:
-            try:
-                if consumer_proc.is_alive():
-                    consumer_proc.terminate()
-                consumer_proc.join(timeout=2.0)
-                if consumer_proc.is_alive():
-                    consumer_proc.kill()
-                    consumer_proc.join(timeout=1.0)
-            except Exception:
-                pass
-
-        for q in (port_queue, consumer_result_queue, producer_result_queue):
-            try:
-                q.close()
-                q.cancel_join_thread()
-            except Exception:
-                pass
-
-        if temp_logits_path and os.path.exists(temp_logits_path):
-            try:
-                os.remove(temp_logits_path)
-            except Exception:
-                pass
+        cleanup_observed = safe_cleanup_processes(
+            processes=[
+                (producer_proc, producer_pid if producer_pid is not None else (producer_proc.pid if producer_proc else None)),
+                (consumer_proc, consumer_pid if consumer_pid is not None else (consumer_proc.pid if consumer_proc else None)),
+            ],
+            temp_files=[temp_logits_path],
+            queues=[port_queue, consumer_result_queue, producer_result_queue],
+        )
 
     # 3. Run ground-truth baseline in orchestrator
     torch_base_device = torch.device(decode_device if decode_device != "cpu" else prefill_device)
     tokenizer = AutoTokenizer.from_pretrained(model_id)
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32).to(torch_base_device)
+    target_base_dtype = torch.float16 if torch_base_device.type == "cuda" else torch.float32
+    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=target_base_dtype).to(torch_base_device)
     model.eval()
 
     inputs = tokenizer(prompt, return_tensors="pt")
@@ -572,13 +588,13 @@ def run_socket_cache_handoff_experiment(
     reconstructed_tokens = consumer_res["generated_tokens"]
     reconstructed_text = consumer_res["generated_text"]
 
-    # 4. Compare step-by-step logits
+    # 4. Compare step-by-step logits (casting to float32 for stable cosine computation)
     max_logit_errors: List[float] = []
     step_comparisons: List[Dict[str, Any]] = []
 
     for s in range(decode_steps):
-        t_base = base_logits_list[s]
-        t_recon = consumer_logits_tensor[s]
+        t_base = base_logits_list[s].float()
+        t_recon = consumer_logits_tensor[s].float()
         max_err = torch.max(torch.abs(t_base - t_recon)).item()
         cos_sim = torch.cosine_similarity(t_base.flatten(), t_recon.flatten(), dim=0).item()
         max_logit_errors.append(max_err)
@@ -604,7 +620,12 @@ def run_socket_cache_handoff_experiment(
     num_kv_heads = getattr(model.config, "num_key_value_heads", model.config.num_attention_heads)
     head_dim = model.config.hidden_size // model.config.num_attention_heads
     seq_len = inputs.input_ids.shape[1]
-    num_layers = len(out_base.past_key_values.layers)
+    if hasattr(out_base.past_key_values, "layers"):
+        num_layers = len(out_base.past_key_values.layers)
+    elif hasattr(out_base.past_key_values, "key_cache"):
+        num_layers = len(out_base.past_key_values.key_cache)
+    else:
+        num_layers = len(out_base.past_key_values)
 
     uncomp_fp32_bytes = seq_len * num_kv_heads * head_dim * 4 * num_layers * 2
     uncomp_fp16_bytes = uncomp_fp32_bytes // 2
@@ -621,6 +642,19 @@ def run_socket_cache_handoff_experiment(
     else:
         divergence_within_tolerance = bool(max_abs_divergence <= 1e-6)
         tolerance_desc = "|Δ Logits| <= 1e-6"
+
+    # Precise event-based monotonic clock timings
+    t_prod_tok = producer_res.get("t_producer_token_ready", 0.0)
+    t_send_start = producer_res.get("t_sender_wire_start", 0.0)
+    t_cons_cache = consumer_res.get("t_consumer_cache_ready", 0.0)
+    t_cons_tok = consumer_res.get("t_consumer_token_ready", 0.0)
+
+    if t_prod_tok > 0 and t_cons_tok > 0:
+        true_inter_token_handoff_gap_ms = (t_cons_tok - t_prod_tok) * 1000.0
+        transfer_and_reconstruction_latency_ms = (t_cons_cache - t_send_start) * 1000.0
+    else:
+        true_inter_token_handoff_gap_ms = 0.0
+        transfer_and_reconstruction_latency_ms = 0.0
 
     return {
         "model_id": model_id,
@@ -642,12 +676,19 @@ def run_socket_cache_handoff_experiment(
             "block_size_tokens": block_size_tokens,
         },
         "timing_decomposition": {
-            "time_to_first_emitted_token_ms": producer_res.get("time_to_first_emitted_token_ms", 0.0),
-            "handoff_duration_ms": consumer_res.get("handoff_duration_ms", 0.0),
+            "time_to_first_token_ready_ms": producer_res.get("time_to_first_token_ready_ms", 0.0),
+            "transfer_and_reconstruction_latency_ms": transfer_and_reconstruction_latency_ms,
+            "receiver_reconstruction_duration_ms": consumer_res.get("receiver_reconstruction_duration_ms", 0.0),
             "first_decode_step_latency_ms": consumer_res.get("first_decode_step_latency_ms", 0.0),
-            "inter_token_handoff_gap_ms": consumer_res.get("inter_token_handoff_gap_ms", 0.0),
+            "true_inter_token_handoff_gap_ms": true_inter_token_handoff_gap_ms,
             "subsequent_step_latencies_ms": consumer_res.get("subsequent_step_latencies_ms", []),
             "median_subsequent_latency_ms": consumer_res.get("median_subsequent_latency_ms", 0.0),
+            "raw_event_timestamps": {
+                "t_producer_token_ready": t_prod_tok,
+                "t_sender_wire_start": t_send_start,
+                "t_consumer_cache_ready": t_cons_cache,
+                "t_consumer_token_ready": t_cons_tok,
+            },
         },
         "assigned_port": assigned_port,
         "all_tokens_match": all_tokens_match,
@@ -666,6 +707,7 @@ def run_socket_cache_handoff_experiment(
             "wire_reduction_vs_fp16_pct": wire_reduction_vs_fp16_pct,
         },
         "step_comparisons": step_comparisons,
+        "cleanup_observed": cleanup_observed,
     }
 
 
@@ -763,11 +805,13 @@ def main(
         f"  Requested Mode:             {mode_str}\n"
         f"  Encoding Used on Wire:      [bold yellow]{codec_info['encoding_used']}[/bold yellow]\n"
         f"  Fallback Status:            {'[italic yellow]Emulated Fallback (Non-native FP8 HW)[/italic yellow]' if codec_info['is_emulated_fallback'] else '[bold green]Direct Native Support[/bold green]'}\n\n"
-        f"[bold]Disaggregated Serving Latency Decomposition:[/bold]\n"
-        f"  T_first_token (Prefill Token 0):       {timing['time_to_first_emitted_token_ms']:.2f} ms (Emitted directly by prefill worker)\n"
-        f"  T_handoff (Transfer & Deserialization): {timing['handoff_duration_ms']:.2f} ms (Socket read, framing check, reconstruction)\n"
-        f"  ΔT_gap (Stall Before Token 1):          {timing['inter_token_handoff_gap_ms']:.2f} ms (T_handoff + first consumer step)\n"
-        f"  T_decode (Subsequent Step Median):      {timing['median_subsequent_latency_ms']:.2f} ms (Per continuation token)\n\n"
+        f"[bold]Disaggregated Serving Latency Decomposition (Measured Monotonic Events):[/bold]\n"
+        f"  T_first_token (Prefill Token 0 Ready): {timing.get('time_to_first_token_ready_ms', timing.get('time_to_first_emitted_token_ms', 0.0)):.2f} ms (Computed on prefill worker)\n"
+        f"  T_transfer (Wire + Staging + Reconstruct): {timing.get('transfer_and_reconstruction_latency_ms', timing.get('handoff_duration_ms', 0.0)):.2f} ms (Sender start to receiver ready)\n"
+        f"  T_reconstruct (Receiver Local Duration): {timing.get('receiver_reconstruction_duration_ms', 0.0):.2f} ms\n"
+        f"  ΔT_gap (True Inter-Token Handoff Gap): {timing.get('true_inter_token_handoff_gap_ms', timing.get('inter_token_handoff_gap_ms', 0.0)):.2f} ms (Token 0 ready to Token 1 ready)\n"
+        f"  T_decode (First Token Compute):         {timing.get('first_decode_step_latency_ms', 0.0):.2f} ms\n"
+        f"  T_decode (Continuation Step Median):    {timing.get('median_subsequent_latency_ms', 0.0):.2f} ms\n\n"
         f"[bold]Numerical Equivalence:[/bold]\n"
         f"  Max Absolute Logit Error: [bold green]{results['max_abs_logit_divergence']:.2e}[/bold green] (Tolerance: <= 1e-6)\n"
         f"  Tokens Match: {'[bold green]100% EXACT[/bold green]' if results['all_tokens_match'] else '[bold red]FAILED[/bold red]'}\n\n"

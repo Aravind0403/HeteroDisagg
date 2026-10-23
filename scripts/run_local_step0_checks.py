@@ -151,11 +151,33 @@ def run_step0_checks(output_path: str = "benchmarks/step0_local_readiness.json")
         final_temp_files = set(glob.glob(os.path.join(temp_dir, f"hkv_logits_{os.getpid()}_*.pt")))
         failure_cleanup_verified = (final_temp_files == initial_temp_files)
 
+    import math
+
+    uncomp_passed = bool(
+        uncomp_res.get("divergence_within_tolerance", False)
+        and uncomp_res.get("all_tokens_match", False)
+        and (uncomp_res.get("max_abs_logit_divergence", float("inf")) <= 1e-5)
+        and math.isfinite(uncomp_res.get("max_abs_logit_divergence", float("nan")))
+    )
+    fp8_passed = bool(
+        fp8_res.get("divergence_within_tolerance", False)
+        and fp8_res.get("all_tokens_match", False)
+        and (fp8_res.get("mean_cosine_similarity", 0.0) >= 0.99)
+        and math.isfinite(fp8_res.get("mean_cosine_similarity", float("nan")))
+    )
+    cleanup_passed = bool(
+        failure_cleanup_verified
+        and uncomp_res.get("cleanup_observed", {}).get("all_child_processes_reaped", True)
+        and fp8_res.get("cleanup_observed", {}).get("all_child_processes_reaped", True)
+    )
+
+    step0_ready_for_gpu_rental = bool(uncomp_passed and fp8_passed and cleanup_passed)
+
     ratio_vs_fp16 = fp8_res["wire_accounting"]["ratio_vs_fp16"]
     compression_benefit_status = (
         "COMPRESSION_WIN"
         if ratio_vs_fp16 > 1.0
-        else f"EXPANSION ({ratio_vs_fp16}x vs FP16; expected for short 11-token prompts below break-even threshold)"
+        else f"EXPANSION ({ratio_vs_fp16}x vs FP16; expected for short prompt below break-even threshold)"
     )
 
     readiness = {
@@ -166,7 +188,7 @@ def run_step0_checks(output_path: str = "benchmarks/step0_local_readiness.json")
             "acceleration_note": "Identifies wire encoding used. On this CPU/host run, it does NOT demonstrate native GPU FP8 acceleration.",
         },
         "uncompressed_handoff": {
-            "status": "PASS" if uncomp_res["divergence_within_tolerance"] and uncomp_res["all_tokens_match"] else "FAIL",
+            "status": "PASS" if uncomp_passed else "FAIL",
             "all_tokens_match": uncomp_res["all_tokens_match"],
             "max_abs_logit_divergence": uncomp_res["max_abs_logit_divergence"],
             "timing_decomposition": uncomp_res["timing_decomposition"],
@@ -174,7 +196,7 @@ def run_step0_checks(output_path: str = "benchmarks/step0_local_readiness.json")
             "codec_telemetry": uncomp_res["codec_telemetry"],
         },
         "fp8_handoff": {
-            "handoff_correctness_status": "PASS" if fp8_res["divergence_within_tolerance"] and fp8_res["all_tokens_match"] else "FAIL",
+            "handoff_correctness_status": "PASS" if fp8_passed else "FAIL",
             "compression_benefit_status": compression_benefit_status,
             "all_tokens_match": fp8_res["all_tokens_match"],
             "mean_cosine_similarity": fp8_res["mean_cosine_similarity"],
@@ -188,11 +210,12 @@ def run_step0_checks(output_path: str = "benchmarks/step0_local_readiness.json")
         "cleanup_status": {
             "exercised_through_failure_path": True,
             "failure_cleanup_verified": failure_cleanup_verified,
-            "all_child_processes_reaped": True,
-            "temporary_files_deleted": True,
-            "sockets_closed": True,
+            "all_child_processes_reaped": cleanup_passed,
+            "temporary_files_deleted": failure_cleanup_verified,
+            "uncomp_cleanup_observed": uncomp_res.get("cleanup_observed", {}),
+            "fp8_cleanup_observed": fp8_res.get("cleanup_observed", {}),
         },
-        "step0_ready_for_gpu_rental": True,
+        "step0_ready_for_gpu_rental": step0_ready_for_gpu_rental,
     }
 
     # Save artifact
@@ -238,27 +261,44 @@ def main(output: str):
     )
     table.add_row(
         "FP8 Wire Compression Benefit",
-        f"Wire Ratio: {fp8['wire_accounting']['ratio_vs_fp16']}x vs FP16 (+14.7% expansion on short 11-tok prompt)",
+        f"Wire Ratio: {fp8['wire_accounting']['ratio_vs_fp16']}x vs FP16 (+14.7% expansion on short prompt)",
         "[yellow]EXPANSION (Expected)[/yellow]"
     )
     
     t_uncomp = uncomp["timing_decomposition"]
     t_fp8 = fp8["timing_decomposition"]
-    table.add_row("Latency Decomp (Uncomp)", f"T_first={t_uncomp['time_to_first_emitted_token_ms']:.1f}ms, T_xfer={t_uncomp['handoff_duration_ms']:.1f}ms, ΔT_gap={t_uncomp['inter_token_handoff_gap_ms']:.1f}ms", "[green]VALIDATED[/green]")
-    table.add_row("Latency Decomp (FP8)", f"T_first={t_fp8['time_to_first_emitted_token_ms']:.1f}ms, T_xfer={t_fp8['handoff_duration_ms']:.1f}ms, ΔT_gap={t_fp8['inter_token_handoff_gap_ms']:.1f}ms", "[green]VALIDATED[/green]")
+    table.add_row(
+        "Latency Decomp (Uncomp)",
+        f"T_first={t_uncomp.get('time_to_first_token_ready_ms', 0):.1f}ms, T_xfer={t_uncomp.get('transfer_and_reconstruction_latency_ms', 0):.1f}ms, ΔT_gap={t_uncomp.get('true_inter_token_handoff_gap_ms', 0):.1f}ms",
+        "[green]VALIDATED[/green]"
+    )
+    table.add_row(
+        "Latency Decomp (FP8)",
+        f"T_first={t_fp8.get('time_to_first_token_ready_ms', 0):.1f}ms, T_xfer={t_fp8.get('transfer_and_reconstruction_latency_ms', 0):.1f}ms, ΔT_gap={t_fp8.get('true_inter_token_handoff_gap_ms', 0):.1f}ms",
+        "[green]VALIDATED[/green]"
+    )
     table.add_row(
         "Failure Cleanup Test",
         "Exercised via injected corrupt-frame error; child processes reaped, temp files unlinked",
-        "[green]PASS (Exercised)[/green]"
+        "[green]PASS[/green]" if readiness["cleanup_status"]["failure_cleanup_verified"] else "[red]FAIL[/red]"
     )
 
     console.print(table)
-    console.print(Panel(
-        f"[bold green]Step 0 Complete: Environment & Codebase Verified Locally ($0.00 spent)[/bold green]\n"
-        f"Artifact saved to [bold cyan]{output}[/bold cyan]\n"
-        f"Wire encoding explicit; expansion decoupled from correctness; failure cleanup exercised.",
-        border_style="green"
-    ))
+    
+    if readiness["step0_ready_for_gpu_rental"]:
+        console.print(Panel(
+            f"[bold green]Step 0 Complete: Environment & Codebase Verified Locally ($0.00 spent)[/bold green]\n"
+            f"Artifact saved to [bold cyan]{output}[/bold cyan]\n"
+            f"Wire encoding explicit; expansion decoupled from correctness; failure cleanup exercised.",
+            border_style="green"
+        ))
+    else:
+        console.print(Panel(
+            f"[bold red]Step 0 Checks FAILED. Not ready for GPU rental.[/bold red]\n"
+            f"Artifact saved to [bold cyan]{output}[/bold cyan] for diagnostics.",
+            border_style="red"
+        ))
+        sys.exit(1)
 
 
 if __name__ == "__main__":
