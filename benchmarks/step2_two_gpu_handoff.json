@@ -1,0 +1,115 @@
+{
+  "timestamp": "2026-10-23T16:14:39Z",
+  "hardware_telemetry": {
+    "os": "Linux",
+    "arch": "x86_64",
+    "python_version": "3.11.9",
+    "torch_version": "2.4.0",
+    "cuda_available": true,
+    "cuda_device_count": 2,
+    "prefill_device": "cuda:0",
+    "decode_device": "cuda:1",
+    "is_two_physical_cuda_gpus": true,
+    "transport_architecture": "Localhost TCP Socket with CPU Staging",
+    "transport_notes": "Independent OS processes communicate over 127.0.0.1 TCP socket with host-memory staging. Measures network stack serialization, framing, and socket buffer handoff; does not utilize direct CUDA IPC or NVLink P2P access.",
+    "gpu_0": {
+      "index": 0,
+      "name": "NVIDIA GeForce RTX 4070 SUPER",
+      "total_memory_gb": 11.6,
+      "compute_capability": "8.9"
+    },
+    "gpu_1": {
+      "index": 1,
+      "name": "NVIDIA GeForce RTX 4070 SUPER",
+      "total_memory_gb": 11.6,
+      "compute_capability": "8.9"
+    },
+    "hardware_interconnect": {
+      "can_access_peer_0_to_1": false,
+      "can_access_peer_1_to_0": false,
+      "p2p_capable": false
+    }
+  },
+  "completion_criterion": {
+    "name": "Decode demonstrably consumes the transferred cache",
+    "passed": true,
+    "null_cache_divergence_proven": true,
+    "uncompressed_tokens_match": true,
+    "fp8_tokens_match": true,
+    "uncompressed_max_abs_logit_error": 0.0,
+    "fp8_cosine_similarity": 0.9994139671325684
+  },
+  "baseline": {
+    "device": "cuda:1",
+    "generated_tokens": [
+      279,
+      990,
+      315,
+      2155
+    ],
+    "generated_text": " the use of different"
+  },
+  "null_cache_ablation": {
+    "device": "cuda:1",
+    "generated_tokens": [
+      279,
+      1156,
+      220,
+      16
+    ],
+    "generated_text": " the first 1",
+    "diverged_from_baseline": true
+  },
+  "uncompressed_exact": {
+    "prefill_device": "cuda:0",
+    "decode_device": "cuda:1",
+    "encoding_used": "float16",
+    "wire_accounting": {
+      "framing_bytes": 776,
+      "metadata_bytes": 34526,
+      "body_bytes": 86016,
+      "total_wire_bytes": 121318
+    },
+    "generated_tokens": [
+      279,
+      990,
+      315,
+      2155
+    ],
+    "generated_text": " the use of different",
+    "timing_decomposition": {
+      "time_to_first_token_ms": 261.68006600346416,
+      "handoff_duration_ms": 7.621103985002264,
+      "first_decode_step_latency_ms": 266.890068014618,
+      "inter_token_handoff_gap_ms": 274.5111719996203,
+      "median_subsequent_latency_ms": 33.04854899761267
+    }
+  },
+  "fp8_wire_codec": {
+    "prefill_device": "cuda:0",
+    "decode_device": "cuda:1",
+    "encoding_used": "float8_e4m3fn",
+    "is_emulated_fallback": false,
+    "wire_accounting": {
+      "framing_bytes": 776,
+      "metadata_bytes": 36253,
+      "body_bytes": 98688,
+      "total_wire_bytes": 135717
+    },
+    "generated_tokens": [
+      279,
+      990,
+      315,
+      2155
+    ],
+    "generated_text": " the use of different",
+    "timing_decomposition": {
+      "time_to_first_token_ms": 289.11938998498954,
+      "handoff_duration_ms": 18.344518000958487,
+      "first_decode_step_latency_ms": 325.2405069943052,
+      "inter_token_handoff_gap_ms": 343.58502499526367,
+      "median_subsequent_latency_ms": 31.83712300960906
+    },
+    "compression_ratio_vs_uncompressed": 0.8939042271786143
+  }
+}
