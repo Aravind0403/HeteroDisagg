@@ -1,0 +1,63 @@
+{
+  "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+  "pids": {
+    "orchestrator_pid": 30891,
+    "producer_pid": 30913,
+    "consumer_pid": 30910
+  },
+  "assigned_port": 54575,
+  "all_tokens_match": true,
+  "max_abs_logit_divergence": 0.0,
+  "tolerance": 1e-06,
+  "divergence_within_tolerance": true,
+  "baseline_generated_text": " the use of different",
+  "reconstructed_generated_text": " the use of different",
+  "wire_accounting": {
+    "framing_bytes": 776,
+    "metadata_bytes": 34507,
+    "body_bytes": 172032,
+    "total_wire_bytes": 207315
+  },
+  "step_comparisons": [
+    {
+      "step": 1,
+      "baseline_token": 279,
+      "baseline_token_str": " the",
+      "reconstructed_token": 279,
+      "reconstructed_token_str": " the",
+      "tokens_match": true,
+      "max_abs_logit_error": 0.0,
+      "cosine_similarity": 1.0
+    },
+    {
+      "step": 2,
+      "baseline_token": 990,
+      "baseline_token_str": " use",
+      "reconstructed_token": 990,
+      "reconstructed_token_str": " use",
+      "tokens_match": true,
+      "max_abs_logit_error": 0.0,
+      "cosine_similarity": 1.0
+    },
+    {
+      "step": 3,
+      "baseline_token": 315,
+      "baseline_token_str": " of",
+      "reconstructed_token": 315,
+      "reconstructed_token_str": " of",
+      "tokens_match": true,
+      "max_abs_logit_error": 0.0,
+      "cosine_similarity": 1.0
+    },
+    {
+      "step": 4,
+      "baseline_token": 2155,
+      "baseline_token_str": " different",
+      "reconstructed_token": 2155,
+      "reconstructed_token_str": " different",
+      "tokens_match": true,
+      "max_abs_logit_error": 0.0,
+      "cosine_similarity": 1.0
+    }
+  ]
+}
