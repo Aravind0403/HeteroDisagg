@@ -1,0 +1,68 @@
+{
+  "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+  "num_layers": 24,
+  "num_kv_heads": 2,
+  "head_dim": 64,
+  "prefill_tp": 2,
+  "decode_tp": 1,
+  "prompt": "Heterogeneous disaggregated inference allows",
+  "decode_steps": 5,
+  "max_k_cache_diff": 0.0,
+  "max_v_cache_diff": 0.0,
+  "max_logit_divergence_overall": 0.0,
+  "all_tokens_match": true,
+  "baseline_generated_text": " the use of different models",
+  "reconstructed_generated_text": " the use of different models",
+  "step_results": [
+    {
+      "step": 1,
+      "max_abs_logit_diff": 0.0,
+      "cosine_similarity": 1.0000146627426147,
+      "baseline_token_id": 279,
+      "baseline_token_str": " the",
+      "reconstructed_token_id": 279,
+      "reconstructed_token_str": " the",
+      "tokens_match": true
+    },
+    {
+      "step": 2,
+      "max_abs_logit_diff": 0.0,
+      "cosine_similarity": 1.0000042915344238,
+      "baseline_token_id": 990,
+      "baseline_token_str": " use",
+      "reconstructed_token_id": 990,
+      "reconstructed_token_str": " use",
+      "tokens_match": true
+    },
+    {
+      "step": 3,
+      "max_abs_logit_diff": 0.0,
+      "cosine_similarity": 1.0000026226043701,
+      "baseline_token_id": 315,
+      "baseline_token_str": " of",
+      "reconstructed_token_id": 315,
+      "reconstructed_token_str": " of",
+      "tokens_match": true
+    },
+    {
+      "step": 4,
+      "max_abs_logit_diff": 0.0,
+      "cosine_similarity": 1.0000184774398804,
+      "baseline_token_id": 2155,
+      "baseline_token_str": " different",
+      "reconstructed_token_id": 2155,
+      "reconstructed_token_str": " different",
+      "tokens_match": true
+    },
+    {
+      "step": 5,
+      "max_abs_logit_diff": 0.0,
+      "cosine_similarity": 1.0000141859054565,
+      "baseline_token_id": 4119,
+      "baseline_token_str": " models",
+      "reconstructed_token_id": 4119,
+      "reconstructed_token_str": " models",
+      "tokens_match": true
+    }
+  ]
+}
