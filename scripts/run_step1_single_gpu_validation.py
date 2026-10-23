@@ -228,7 +228,10 @@ def run_real_model_single_gpu_validation(
     dtype = torch.float16 if device.type == "cuda" else torch.float32
 
     tokenizer = AutoTokenizer.from_pretrained(model_id)
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype).to(device)
+    try:
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype).to(device)
+    except TypeError:
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype).to(device)
     model.eval()
 
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
