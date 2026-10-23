@@ -398,3 +398,102 @@ def test_step0_rejects_missing_or_failed_cleanup_observations():
             readiness = run_step0_checks(output_path=out_json)
             assert readiness["step0_ready_for_gpu_rental"] is False
             assert readiness["cleanup_status"]["all_child_processes_reaped"] is False
+
+
+def test_step2_explicit_cuda_device_forwarding_with_parent_current_device_1():
+    """
+    Verifies that when parent's current_device=1 and requested devices are ('cuda', 'cuda:0'),
+    the devices are converted to explicit 'cuda:1' and 'cuda:0' strings before baseline
+    execution and worker launch, preventing spawned child workers from selecting GPU 0.
+    """
+    from scripts.run_step2_two_gpu_handoff import run_step2_suite
+
+    with tempfile.TemporaryDirectory() as td:
+        out_json = os.path.join(td, "step2_device_forwarding.json")
+
+        with patch("torch.cuda.is_available", return_value=True), \
+             patch("torch.cuda.device_count", return_value=2), \
+             patch("torch.cuda.current_device", return_value=1), \
+             patch("scripts.run_step2_two_gpu_handoff.run_baseline_and_ablation") as mock_baseline, \
+             patch("scripts.run_step2_two_gpu_handoff.execute_two_gpu_handoff_case") as mock_exec, \
+             patch("torch.cuda.get_device_properties") as mock_props, \
+             patch("torch.cuda.can_device_access_peer", return_value=True):
+
+            mock_prop = MagicMock()
+            mock_prop.name = "NVIDIA RTX 4070 SUPER"
+            mock_prop.total_memory = 12 * (1024**3)
+            mock_prop.major = 8
+            mock_prop.minor = 9
+            mock_props.return_value = mock_prop
+
+            dummy_logits = torch.zeros((2, 10))
+            dummy_tokens = [1, 2]
+            dummy_text = "test"
+            mock_baseline.return_value = (dummy_logits, dummy_tokens, dummy_text, [3, 4], "diverged", "commit123")
+
+            def mock_exec_fn(*args, **kwargs):
+                return {
+                    "consumer": {
+                        "generated_tokens": dummy_tokens,
+                        "generated_text": dummy_text,
+                        "wire_accounting": {"body_bytes": 100, "total_wire_bytes": 200},
+                        "manifest_dict": {},
+                    },
+                    "producer": {
+                        "encoding_used": "float16",
+                        "is_emulated_fallback": False,
+                        "prompt_tokens": [10, 20],
+                        "seq_len": 2,
+                    },
+                    "consumer_logits": dummy_logits,
+                    "timing_decomposition": {
+                        "time_to_first_token_ready_ms": 1.0,
+                        "transfer_and_reconstruction_latency_ms": 1.0,
+                        "receiver_reconstruction_duration_ms": 0.5,
+                        "first_decode_step_latency_ms": 1.0,
+                        "true_inter_token_handoff_gap_ms": 2.0,
+                        "median_subsequent_latency_ms": 1.0,
+                        "subsequent_step_latencies_ms": [1.0],
+                    },
+                    "cleanup_report": {
+                        "all_child_processes_reaped": True,
+                        "temporary_files_deleted": True,
+                        "surviving_pids": [],
+                        "leaked_temp_files": [],
+                    },
+                }
+
+            mock_exec.side_effect = mock_exec_fn
+
+            results = run_step2_suite(
+                model="Qwen/Qwen2.5-0.5B-Instruct",
+                prompt="Heterogeneous disaggregated inference allows",
+                steps=2,
+                prefill_device="cuda",
+                decode_device="cuda:0",
+                output_path=out_json,
+            )
+
+            # 1. Assert worker launch received explicit canonical strings
+            assert mock_exec.call_count == 2
+            first_call_kwargs = mock_exec.call_args_list[0].kwargs
+            assert first_call_kwargs["prefill_device"] == "cuda:1", (
+                f"Worker must receive explicit 'cuda:1', got {first_call_kwargs['prefill_device']}"
+            )
+            assert first_call_kwargs["decode_device"] == "cuda:0", (
+                f"Worker must receive explicit 'cuda:0', got {first_call_kwargs['decode_device']}"
+            )
+
+            # 2. Assert baseline received explicit canonical decode device
+            baseline_call_args = mock_baseline.call_args[0]
+            assert baseline_call_args[3] == "cuda:0"
+
+            # 3. Assert artifact exported explicit canonical strings
+            assert results["uncompressed_exact"]["prefill_device"] == "cuda:1"
+            assert results["uncompressed_exact"]["decode_device"] == "cuda:0"
+            assert results["fp8_wire_codec"]["prefill_device"] == "cuda:1"
+            assert results["fp8_wire_codec"]["decode_device"] == "cuda:0"
+            assert results["hardware_telemetry"]["prefill_device"] == "cuda:1"
+            assert results["hardware_telemetry"]["decode_device"] == "cuda:0"
+            assert results["hardware_telemetry"]["requested_prefill_device"] == "cuda"
+            assert results["hardware_telemetry"]["requested_decode_device"] == "cuda:0"

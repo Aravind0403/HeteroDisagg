@@ -83,21 +83,38 @@ from hetero_kv.transport import (
 console = Console()
 
 
+def resolve_canonical_device_str(device_str: str) -> str:
+    """
+    Resolves a device string to its canonical explicit representation.
+    For CUDA devices, converts implicit 'cuda' or 'cuda:N' to explicit 'cuda:<resolved_index>'
+    using the calling process's current CUDA device state.
+    Preserves 'cpu', 'mps', or other backend types as-is.
+    """
+    dev = torch.device(device_str)
+    if dev.type == "cuda":
+        has_cuda = torch.cuda.is_available()
+        idx = dev.index if dev.index is not None else (torch.cuda.current_device() if has_cuda else 0)
+        return f"cuda:{idx}"
+    elif dev.type == "mps":
+        return "mps"
+    elif dev.type == "cpu":
+        return "cpu"
+    return str(dev)
+
+
 def inspect_two_gpu_system(prefill_dev_str: str, decode_dev_str: str) -> Dict[str, Any]:
     """Inspects multi-GPU hardware environment and interconnect characteristics."""
     has_cuda = torch.cuda.is_available()
     cuda_count = torch.cuda.device_count() if has_cuda else 0
 
-    p_dev = torch.device(prefill_dev_str)
-    d_dev = torch.device(decode_dev_str)
+    p_dev_canonical = resolve_canonical_device_str(prefill_dev_str)
+    d_dev_canonical = resolve_canonical_device_str(decode_dev_str)
 
-    # Resolve CUDA devices to explicit integer device indices
-    p_idx = None
-    d_idx = None
-    if p_dev.type == "cuda":
-        p_idx = p_dev.index if p_dev.index is not None else (torch.cuda.current_device() if has_cuda else 0)
-    if d_dev.type == "cuda":
-        d_idx = d_dev.index if d_dev.index is not None else (torch.cuda.current_device() if has_cuda else 0)
+    p_dev = torch.device(p_dev_canonical)
+    d_dev = torch.device(d_dev_canonical)
+
+    p_idx = p_dev.index if p_dev.type == "cuda" else None
+    d_idx = d_dev.index if d_dev.type == "cuda" else None
 
     is_two_physical_cuda = bool(
         has_cuda
@@ -120,8 +137,10 @@ def inspect_two_gpu_system(prefill_dev_str: str, decode_dev_str: str) -> Dict[st
         "cuda_toolkit_version": getattr(torch.version, "cuda", None),
         "cuda_available": has_cuda,
         "cuda_device_count": cuda_count,
-        "prefill_device": prefill_dev_str,
-        "decode_device": decode_dev_str,
+        "requested_prefill_device": prefill_dev_str,
+        "requested_decode_device": decode_dev_str,
+        "prefill_device": p_dev_canonical,
+        "decode_device": d_dev_canonical,
         "resolved_prefill_device_index": p_idx,
         "resolved_decode_device_index": d_idx,
         "is_two_physical_cuda_gpus": is_two_physical_cuda,
@@ -753,8 +772,18 @@ def run_step2_suite(
     else:
         p_dev = prefill_device
         d_dev = decode_device
+    req_p_dev = prefill_device
+    req_d_dev = decode_device
+
+    # Canonicalize device strings to explicit indices before baseline execution or worker launch
+    p_dev = resolve_canonical_device_str(p_dev)
+    d_dev = resolve_canonical_device_str(d_dev)
 
     hardware_info = inspect_two_gpu_system(p_dev, d_dev)
+    if req_p_dev is not None:
+        hardware_info["requested_prefill_device"] = req_p_dev
+    if req_d_dev is not None:
+        hardware_info["requested_decode_device"] = req_d_dev
 
     # 1. Run Ground-Truth Baseline & Null-Cache Negative Control
     (
