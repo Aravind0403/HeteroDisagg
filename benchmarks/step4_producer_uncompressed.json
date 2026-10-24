@@ -1,0 +1,76 @@
+{
+  "role": "producer",
+  "timestamp": "2026-10-24T03:01:47Z",
+  "request_id": "step4-6297167f81aa",
+  "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+  "destination": {
+    "host": "127.0.0.1",
+    "port": 50477
+  },
+  "git_provenance": {
+    "commit_hash": "3f21f02797a949f3e22faa25e915bc3f26f4304c",
+    "branch": "main",
+    "is_dirty": true,
+    "commit_date": "2026-10-24T07:07:15+05:30"
+  },
+  "hardware_telemetry": {
+    "os": "Darwin",
+    "arch": "arm64",
+    "python_version": "3.12.8",
+    "torch_version": "2.10.0",
+    "transformers_version": "5.5.0",
+    "cuda_toolkit_version": null,
+    "cuda_available": false,
+    "cuda_device_count": 0,
+    "device": {
+      "device_str": "cpu",
+      "device_type": "cpu",
+      "device_index": null,
+      "name": "arm",
+      "cpu_count": 10
+    }
+  },
+  "configuration": {
+    "prompt": "Heterogeneous disaggregated inference allows",
+    "device": "cpu",
+    "dtype": "float32",
+    "enable_fp8": false,
+    "prefill_tp": 1,
+    "decode_tp": 1,
+    "block_size": 16,
+    "timeout_seconds": 30.0
+  },
+  "success": true,
+  "error": null,
+  "resolved_checkpoint_commit_hash": "7ae557604adf67be50417f59c2c2f167def9a775",
+  "prompt_tokens": [
+    39,
+    1404,
+    48022,
+    18288,
+    93040,
+    44378,
+    6147
+  ],
+  "prompt_token_count": 7,
+  "cached_seq_len": 7,
+  "initial_token_id": 369,
+  "initial_token_str": " for",
+  "timings_producer_local_ms": {
+    "prefill_duration_ms": 1147.5483339745551,
+    "wire_send_duration_ms": 8.563000010326505,
+    "producer_ack_roundtrip_ms": 9.254875010810792
+  },
+  "wire_accounting": {
+    "framing_bytes": 392,
+    "metadata_bytes": 17407,
+    "body_bytes": 172032,
+    "total_wire_bytes": 189831,
+    "frames_sent": 48
+  },
+  "consumer_completion_ack": {
+    "status": "COMPLETED",
+    "received_frames": 48,
+    "total_wire_bytes": 189831
+  }
+}

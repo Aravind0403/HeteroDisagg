@@ -1,0 +1,134 @@
+{
+  "role": "consumer",
+  "timestamp": "2026-10-24T03:01:47Z",
+  "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+  "binding": {
+    "host": "127.0.0.1",
+    "port": 50477
+  },
+  "git_provenance": {
+    "commit_hash": "3f21f02797a949f3e22faa25e915bc3f26f4304c",
+    "branch": "main",
+    "is_dirty": true,
+    "commit_date": "2026-10-24T07:07:15+05:30"
+  },
+  "hardware_telemetry": {
+    "os": "Darwin",
+    "arch": "arm64",
+    "python_version": "3.12.8",
+    "torch_version": "2.10.0",
+    "transformers_version": "5.5.0",
+    "cuda_toolkit_version": null,
+    "cuda_available": false,
+    "cuda_device_count": 0,
+    "device": {
+      "device_str": "cpu",
+      "device_type": "cpu",
+      "device_index": null,
+      "name": "arm",
+      "cpu_count": 10
+    }
+  },
+  "configuration": {
+    "device": "cpu",
+    "dtype": "float32",
+    "decode_steps": 4,
+    "timeout_seconds": 30.0
+  },
+  "success": true,
+  "error": null,
+  "resolved_checkpoint_commit_hash": "7ae557604adf67be50417f59c2c2f167def9a775",
+  "request_id": "step4-6297167f81aa",
+  "manifest": {
+    "request_id": "step4-6297167f81aa",
+    "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+    "checkpoint_commit_hash": "7ae557604adf67be50417f59c2c2f167def9a775",
+    "num_layers": 24,
+    "num_kv_heads": 2,
+    "head_dim": 64,
+    "seq_len": 7,
+    "prefill_tp": 1,
+    "decode_tp": 1,
+    "expected_frames": 48,
+    "initial_decode_token": 369,
+    "initial_decode_token_str": " for",
+    "prompt_tokens": [
+      39,
+      1404,
+      48022,
+      18288,
+      93040,
+      44378,
+      6147
+    ],
+    "dtype": "float32",
+    "enable_fp8": false,
+    "block_size_tokens": 16,
+    "decode_rank": 0
+  },
+  "wire_accounting": {
+    "framing_bytes": 392,
+    "metadata_bytes": 17407,
+    "body_bytes": 172032,
+    "total_wire_bytes": 189831,
+    "frames_received": 48
+  },
+  "timings_consumer_local_ms": {
+    "wire_receive_duration_ms": 8.815584005787969,
+    "reconstruction_duration_ms": 2.4524580221623182,
+    "first_decode_step_latency_ms": 78.93112499732524,
+    "median_subsequent_latency_ms": 81.5707080764696,
+    "subsequent_latencies_ms": [
+      81.5707080764696,
+      71.93687499966472,
+      85.89370804838836
+    ]
+  },
+  "baseline_execution": {
+    "initial_token_id": 369,
+    "initial_token_str": " for",
+    "generated_tokens": [
+      279,
+      990,
+      315,
+      2155
+    ],
+    "generated_text": " the use of different"
+  },
+  "negative_control_null_cache": {
+    "null_tokens": [
+      279,
+      2038,
+      72030,
+      72030
+    ],
+    "null_text": " the code/API/API",
+    "diverged_from_baseline": true
+  },
+  "transferred_cache_decoding": {
+    "free_running_tokens": [
+      279,
+      990,
+      315,
+      2155
+    ],
+    "free_running_text": " the use of different",
+    "free_running_tokens_match": true,
+    "aligned_comparison": {
+      "max_abs_logit_error": 0.0,
+      "mean_abs_logit_error": 0.0,
+      "cosine_similarity": 1.0000677108764648,
+      "aligned_top1_match": true
+    }
+  },
+  "discrete_checks": {
+    "producer_initial_token_matches_consumer": true,
+    "null_cache_negative_control_diverged": true,
+    "metrics_are_finite": true,
+    "uncompressed_tokens_match": true,
+    "uncompressed_logit_error_within_tolerance": true,
+    "fp8_cosine_similarity_within_threshold": null,
+    "fp8_free_running_tokens_match": null,
+    "fp8_aligned_top1_match": null
+  }
+}
