@@ -103,7 +103,7 @@ def get_git_metadata() -> Dict[str, Any]:
             ["git", "rev-parse", "--abbrev-ref", "HEAD"], stderr=subprocess.DEVNULL
         ).decode("utf-8").strip()
         status_out = subprocess.check_output(
-            ["git", "status", "--porcelain"], stderr=subprocess.DEVNULL
+            ["git", "status", "--porcelain", "--", ":(exclude)benchmarks*"], stderr=subprocess.DEVNULL
         ).decode("utf-8").strip()
         commit_date = subprocess.check_output(
             ["git", "show", "-s", "--format=%cI", "HEAD"], stderr=subprocess.DEVNULL
