@@ -1,17 +1,17 @@
 {
   "role": "producer",
-  "timestamp": "2026-10-24T03:02:38Z",
-  "request_id": "step4-38bb67832ca1",
+  "timestamp": "2026-10-24T03:22:10Z",
+  "request_id": "step4-9d9ae5a29315",
   "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
   "destination": {
     "host": "127.0.0.1",
-    "port": 50500
+    "port": 50783
   },
   "git_provenance": {
-    "commit_hash": "3f21f02797a949f3e22faa25e915bc3f26f4304c",
+    "commit_hash": "9dda61c0a0805bfed6e375d76895b3f86d063582",
     "branch": "main",
-    "is_dirty": true,
-    "commit_date": "2026-10-24T07:07:15+05:30"
+    "is_dirty": false,
+    "commit_date": "2026-10-24T08:51:10+05:30"
   },
   "hardware_telemetry": {
     "os": "Darwin",
@@ -43,7 +43,7 @@
   "success": false,
   "error": {
     "type": "ConnectionRefusedError",
-    "message": "Failed to connect to consumer 127.0.0.1:50500 within 2.0s deadline"
+    "message": "Failed to connect to consumer 127.0.0.1:50783 within 2.0s deadline"
   },
   "resolved_checkpoint_commit_hash": "7ae557604adf67be50417f59c2c2f167def9a775",
   "prompt_tokens": [
@@ -60,6 +60,6 @@
   "initial_token_id": 369,
   "initial_token_str": " for",
   "timings_producer_local_ms": {
-    "prefill_duration_ms": 354.29079190362245
+    "prefill_duration_ms": 297.47500002849847
   }
 }

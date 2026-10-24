@@ -1,0 +1,65 @@
+{
+  "role": "producer",
+  "timestamp": "2026-10-24T03:22:43Z",
+  "request_id": "step4-63fffddfa196",
+  "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+  "destination": {
+    "host": "127.0.0.1",
+    "port": 50800
+  },
+  "git_provenance": {
+    "commit_hash": "9dda61c0a0805bfed6e375d76895b3f86d063582",
+    "branch": "main",
+    "is_dirty": false,
+    "commit_date": "2026-10-24T08:51:10+05:30"
+  },
+  "hardware_telemetry": {
+    "os": "Darwin",
+    "arch": "arm64",
+    "python_version": "3.12.8",
+    "torch_version": "2.10.0",
+    "transformers_version": "5.5.0",
+    "cuda_toolkit_version": null,
+    "cuda_available": false,
+    "cuda_device_count": 0,
+    "device": {
+      "device_str": "cpu",
+      "device_type": "cpu",
+      "device_index": null,
+      "name": "arm",
+      "cpu_count": 10
+    }
+  },
+  "configuration": {
+    "prompt": "Heterogeneous disaggregated inference allows",
+    "device": "cpu",
+    "dtype": "float32",
+    "enable_fp8": false,
+    "prefill_tp": 1,
+    "decode_tp": 1,
+    "block_size": 16,
+    "timeout_seconds": 10.0
+  },
+  "success": false,
+  "error": {
+    "type": "ManifestValidationError",
+    "message": "Unsupported dtype 'invalid_dtype_99', allowed: ['bfloat16', 'float16', 'float32']"
+  },
+  "resolved_checkpoint_commit_hash": "7ae557604adf67be50417f59c2c2f167def9a775",
+  "prompt_tokens": [
+    39,
+    1404,
+    48022,
+    18288,
+    93040,
+    44378,
+    6147
+  ],
+  "prompt_token_count": 7,
+  "cached_seq_len": 7,
+  "initial_token_id": 369,
+  "initial_token_str": " for",
+  "timings_producer_local_ms": {
+    "prefill_duration_ms": 575.6414590869099
+  }
+}

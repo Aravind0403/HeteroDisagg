@@ -1,17 +1,17 @@
 {
   "role": "producer",
-  "timestamp": "2026-10-24T03:01:47Z",
-  "request_id": "step4-6297167f81aa",
+  "timestamp": "2026-10-24T03:21:28Z",
+  "request_id": "step4-c849ec738efc",
   "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
   "destination": {
     "host": "127.0.0.1",
-    "port": 50477
+    "port": 50768
   },
   "git_provenance": {
-    "commit_hash": "3f21f02797a949f3e22faa25e915bc3f26f4304c",
+    "commit_hash": "9dda61c0a0805bfed6e375d76895b3f86d063582",
     "branch": "main",
-    "is_dirty": true,
-    "commit_date": "2026-10-24T07:07:15+05:30"
+    "is_dirty": false,
+    "commit_date": "2026-10-24T08:51:10+05:30"
   },
   "hardware_telemetry": {
     "os": "Darwin",
@@ -57,9 +57,10 @@
   "initial_token_id": 369,
   "initial_token_str": " for",
   "timings_producer_local_ms": {
-    "prefill_duration_ms": 1147.5483339745551,
-    "wire_send_duration_ms": 8.563000010326505,
-    "producer_ack_roundtrip_ms": 9.254875010810792
+    "prefill_duration_ms": 793.765833019279,
+    "wire_send_duration_ms": 3.8490419974550605,
+    "wire_transfer_ack_rtt_ms": 4.181416938081384,
+    "total_session_rtt_ms": 2288.9622079674155
   },
   "wire_accounting": {
     "framing_bytes": 392,
@@ -68,9 +69,26 @@
     "total_wire_bytes": 189831,
     "frames_sent": 48
   },
-  "consumer_completion_ack": {
-    "status": "COMPLETED",
+  "consumer_transfer_ack": {
+    "status": "TRANSFER_RECEIVED",
     "received_frames": 48,
     "total_wire_bytes": 189831
+  },
+  "consumer_validation": {
+    "status": "PASSED",
+    "discrete_checks": {
+      "producer_initial_token_matches_consumer": true,
+      "null_cache_negative_control_diverged": true,
+      "metrics_are_finite": true,
+      "uncompressed_tokens_match": true,
+      "uncompressed_logit_error_within_tolerance": true,
+      "fp8_cosine_similarity_within_threshold": null,
+      "fp8_free_running_tokens_match": null,
+      "fp8_aligned_top1_match": null
+    },
+    "max_abs_logit_error": 0.0,
+    "cosine_similarity": 1.0,
+    "producer_init_match": true,
+    "free_tokens_match": true
   }
 }

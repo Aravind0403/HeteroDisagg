@@ -1,16 +1,16 @@
 {
   "role": "consumer",
-  "timestamp": "2026-10-24T03:01:47Z",
+  "timestamp": "2026-10-24T03:21:28Z",
   "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
   "binding": {
     "host": "127.0.0.1",
-    "port": 50477
+    "port": 50768
   },
   "git_provenance": {
-    "commit_hash": "3f21f02797a949f3e22faa25e915bc3f26f4304c",
+    "commit_hash": "9dda61c0a0805bfed6e375d76895b3f86d063582",
     "branch": "main",
-    "is_dirty": true,
-    "commit_date": "2026-10-24T07:07:15+05:30"
+    "is_dirty": false,
+    "commit_date": "2026-10-24T08:51:10+05:30"
   },
   "hardware_telemetry": {
     "os": "Darwin",
@@ -38,9 +38,9 @@
   "success": true,
   "error": null,
   "resolved_checkpoint_commit_hash": "7ae557604adf67be50417f59c2c2f167def9a775",
-  "request_id": "step4-6297167f81aa",
+  "request_id": "step4-c849ec738efc",
   "manifest": {
-    "request_id": "step4-6297167f81aa",
+    "request_id": "step4-c849ec738efc",
     "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
     "checkpoint_commit_hash": "7ae557604adf67be50417f59c2c2f167def9a775",
     "num_layers": 24,
@@ -74,14 +74,14 @@
     "frames_received": 48
   },
   "timings_consumer_local_ms": {
-    "wire_receive_duration_ms": 8.815584005787969,
-    "reconstruction_duration_ms": 2.4524580221623182,
-    "first_decode_step_latency_ms": 78.93112499732524,
-    "median_subsequent_latency_ms": 81.5707080764696,
+    "wire_receive_duration_ms": 3.9527079788967967,
+    "reconstruction_duration_ms": 1.703290967270732,
+    "first_decode_step_latency_ms": 77.12804200127721,
+    "median_subsequent_latency_ms": 87.4286670004949,
     "subsequent_latencies_ms": [
-      81.5707080764696,
-      71.93687499966472,
-      85.89370804838836
+      87.4286670004949,
+      85.69629199337214,
+      110.95970799215138
     ]
   },
   "baseline_execution": {
@@ -117,7 +117,8 @@
     "aligned_comparison": {
       "max_abs_logit_error": 0.0,
       "mean_abs_logit_error": 0.0,
-      "cosine_similarity": 1.0000677108764648,
+      "raw_cosine_similarity": 1.0000677108764648,
+      "cosine_similarity": 1.0,
       "aligned_top1_match": true
     }
   },

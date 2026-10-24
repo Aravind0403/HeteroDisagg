@@ -1,16 +1,16 @@
 {
   "role": "consumer",
-  "timestamp": "2026-10-24T03:02:24Z",
+  "timestamp": "2026-10-24T03:21:59Z",
   "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
   "binding": {
     "host": "127.0.0.1",
-    "port": 50492
+    "port": 50779
   },
   "git_provenance": {
-    "commit_hash": "3f21f02797a949f3e22faa25e915bc3f26f4304c",
+    "commit_hash": "9dda61c0a0805bfed6e375d76895b3f86d063582",
     "branch": "main",
-    "is_dirty": true,
-    "commit_date": "2026-10-24T07:07:15+05:30"
+    "is_dirty": false,
+    "commit_date": "2026-10-24T08:51:10+05:30"
   },
   "hardware_telemetry": {
     "os": "Darwin",
@@ -41,9 +41,9 @@
     "message": "Manifest checkpoint revision 'corrupted_fake_commit_hash' does not match consumer resolved revision '7ae557604adf67be50417f59c2c2f167def9a775'"
   },
   "resolved_checkpoint_commit_hash": "7ae557604adf67be50417f59c2c2f167def9a775",
-  "request_id": "step4-f358c84d7614",
+  "request_id": "step4-1260e2308f4b",
   "manifest": {
-    "request_id": "step4-f358c84d7614",
+    "request_id": "step4-1260e2308f4b",
     "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
     "checkpoint_commit_hash": "corrupted_fake_commit_hash",
     "num_layers": 24,
