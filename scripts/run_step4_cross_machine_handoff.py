@@ -580,12 +580,7 @@ def run_consumer(
     conn: Optional[socket.socket] = None
 
     try:
-        # 1. Bind and Listen Immediately
-        server_sock.bind((bind_host, bind_port))
-        server_sock.listen(1)
-        click.echo(f"[CONSUMER] Listening on {bind_host}:{bind_port} (timeout={timeout}s)...")
-
-        # 2. Pre-warm Consumer Model and Tokenizer
+        # 1. Pre-warm Consumer Model and Tokenizer FIRST
         click.echo("[CONSUMER] Loading consumer model and tokenizer...")
         tokenizer = AutoTokenizer.from_pretrained(model)
         causal_model = AutoModelForCausalLM.from_pretrained(model, torch_dtype=torch_dtype).to(torch_device)
@@ -593,6 +588,11 @@ def run_consumer(
 
         consumer_commit_hash = getattr(causal_model.config, "_commit_hash", None)
         report["resolved_checkpoint_commit_hash"] = consumer_commit_hash
+
+        # 2. Bind and Listen when completely ready to accept connections
+        server_sock.bind((bind_host, bind_port))
+        server_sock.listen(1)
+        click.echo(f"[CONSUMER] Ready and listening on {bind_host}:{bind_port} (timeout={timeout}s)...")
 
         # Accept connection from producer (robust against ephemeral probes)
         accept_deadline = time.monotonic() + timeout

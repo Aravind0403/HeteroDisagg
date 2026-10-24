@@ -70,7 +70,7 @@ def run_ssh(host: str, port: int, command: str, timeout: float = 60.0) -> Tuple[
 
 
 def search_offers(query: str, max_price: float) -> List[Dict[str, Any]]:
-    """Queries Vast.ai for matching offers under the price threshold."""
+    """Queries Vast.ai for matching offers under the price threshold, prioritizing US region."""
     cmd = ["vastai", "search", "offers", query, "--raw", "--limit", "200"]
     rc, stdout, stderr = run_cmd(cmd, timeout=30.0)
     if rc != 0:
@@ -84,6 +84,10 @@ def search_offers(query: str, max_price: float) -> List[Dict[str, Any]]:
             and o.get("dph_total", 999.0) <= max_price
             and o.get("reliability", 0.0) >= 0.95
         ]
+        # Prefer US region to minimize intercontinental latency and avoid Great Firewall throttling
+        us_offers = [o for o in eligible if "US" in o.get("geolocation", "")]
+        if us_offers:
+            return sorted(us_offers, key=lambda x: x.get("dph_total", 999.0))
         return sorted(eligible, key=lambda x: x.get("dph_total", 999.0))
     except Exception as e:
         print(f"[ERROR] Failed to parse Vast offers JSON: {e}", file=sys.stderr)
@@ -180,8 +184,8 @@ def destroy_instance_safe(instance_id: Optional[int], role: str) -> None:
 
 
 def setup_remote_node(ssh_host: str, ssh_port: int, role: str) -> None:
-    """Clones HeteroDisagg repo and verifies required packages on the remote node."""
-    print(f"[{role.upper()}] Setting up repository and dependencies...")
+    """Clones HeteroDisagg repo, verifies packages, and pre-caches model weights."""
+    print(f"[{role.upper()}] Setting up repository, dependencies, and pre-caching weights...")
     setup_script = """
 set -e
 mkdir -p /workspace
@@ -192,9 +196,17 @@ else
     cd HeteroDisagg && git pull && cd ..
 fi
 pip install -q "transformers>=4.45.0,<4.49.0" pydantic click accelerate
-python3 -c "import torch, transformers, pydantic; print('PyTorch:', torch.__version__, 'Transformers:', transformers.__version__, 'CUDA available:', torch.cuda.is_available(), 'GPU:', torch.cuda.get_device_name(0))"
+python3 -c "
+import torch, transformers, pydantic
+print('PyTorch:', torch.__version__, 'Transformers:', transformers.__version__, 'CUDA:', torch.cuda.is_available(), 'GPU:', torch.cuda.get_device_name(0))
+from transformers import AutoModelForCausalLM, AutoTokenizer
+m = 'Qwen/Qwen2.5-0.5B-Instruct'
+AutoTokenizer.from_pretrained(m)
+AutoModelForCausalLM.from_pretrained(m)
+print('Model pre-cached successfully.')
+"
 """
-    rc, out, err = run_ssh(ssh_host, ssh_port, setup_script, timeout=120.0)
+    rc, out, err = run_ssh(ssh_host, ssh_port, setup_script, timeout=180.0)
     if rc != 0:
         raise RuntimeError(f"[{role.upper()}] Setup failed (code {rc}): {err}\nOutput: {out}")
     print(f"[{role.upper()}] Environment Verified: {out.strip().splitlines()[-1]}")
@@ -331,7 +343,7 @@ def run_remote_step4b(
             f"--device cuda:0 "
             f"--dtype {dtype} "
             f"--decode-steps {decode_steps} "
-            f"--timeout 60 "
+            f"--timeout 90 "
             f"--output {consumer_remote_out}"
         )
 
@@ -346,14 +358,14 @@ def run_remote_step4b(
             f"--device cuda:0 "
             f"--dtype {dtype} "
             f"{fp8_flag} "
-            f"--timeout 60 "
+            f"--timeout 90 "
             f"--output {producer_remote_out}"
         )
 
         # Launch consumer asynchronously via SSH in a thread
         c_result: Dict[str, Any] = {}
         def consumer_worker():
-            rc, out, err = run_ssh(c_ssh[0], c_ssh[1], consumer_cmd, timeout=120.0)
+            rc, out, err = run_ssh(c_ssh[0], c_ssh[1], consumer_cmd, timeout=150.0)
             c_result["rc"] = rc
             c_result["stdout"] = out
             c_result["stderr"] = err
@@ -366,7 +378,7 @@ def run_remote_step4b(
 
         # Launch producer
         print("[PRODUCER] Launching prefill forward pass on Ampere GPU...")
-        p_rc, p_out, p_err = run_ssh(p_ssh[0], p_ssh[1], producer_cmd, timeout=120.0)
+        p_rc, p_out, p_err = run_ssh(p_ssh[0], p_ssh[1], producer_cmd, timeout=150.0)
         c_thread.join(timeout=120.0)
 
         print(f"\n[PRODUCER OUTPUT]\n{p_out}")
