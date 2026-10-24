@@ -162,11 +162,21 @@ def destroy_instance_safe(instance_id: Optional[int], role: str) -> None:
         return
     print(f"[{role.upper()}] Destroying instance {instance_id} to release credits...")
     cmd = ["vastai", "destroy", "instance", str(instance_id)]
-    rc, stdout, stderr = run_cmd(cmd, timeout=25.0)
-    if rc == 0:
-        print(f"[{role.upper()}] Instance {instance_id} destroyed successfully.")
-    else:
-        print(f"[{role.upper()}] Warning: failed to destroy instance {instance_id}: {stderr}", file=sys.stderr)
+    try:
+        proc = subprocess.run(
+            cmd,
+            input="y\n",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=25.0,
+        )
+        if proc.returncode == 0:
+            print(f"[{role.upper()}] Instance {instance_id} destroyed successfully.")
+        else:
+            print(f"[{role.upper()}] Warning: failed to destroy instance {instance_id}: {proc.stderr}", file=sys.stderr)
+    except Exception as e:
+        print(f"[{role.upper()}] Exception destroying instance {instance_id}: {e}", file=sys.stderr)
 
 
 def setup_remote_node(ssh_host: str, ssh_port: int, role: str) -> None:
@@ -181,8 +191,8 @@ if [ ! -d "HeteroDisagg" ]; then
 else
     cd HeteroDisagg && git pull && cd ..
 fi
-pip install -q transformers click accelerate
-python3 -c "import torch, transformers; print('PyTorch:', torch.__version__, 'CUDA available:', torch.cuda.is_available(), 'GPU:', torch.cuda.get_device_name(0))"
+pip install -q "transformers>=4.45.0,<4.49.0" pydantic click accelerate
+python3 -c "import torch, transformers, pydantic; print('PyTorch:', torch.__version__, 'Transformers:', transformers.__version__, 'CUDA available:', torch.cuda.is_available(), 'GPU:', torch.cuda.get_device_name(0))"
 """
     rc, out, err = run_ssh(ssh_host, ssh_port, setup_script, timeout=120.0)
     if rc != 0:
