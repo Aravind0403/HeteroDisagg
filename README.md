@@ -214,41 +214,32 @@ python scripts/run_step4b_remote_handoff.py
 
 ---
 
-## Datacenter Cross-Node Hardware Validation (A100 + RTX 3090)
+## Historical Exploratory Study (v0.1.0 Baseline — September 2026)
 
-Benchmarks captured across physical Ampere silicon rented via Vast.ai (Datacenter Host ID `399360`, California, US) evaluating `meta-llama/Meta-Llama-3-8B-Instruct` (32 layers, 8 KV heads, prompt 1024, decode 128):
+Prior to establishing the formal October 2026 5-stage validation ladder, an initial exploratory benchmark evaluated isolated GPU kernel timings and container networking constraints on physical Ampere silicon (Datacenter Host ID `399360`, California, US) running `meta-llama/Meta-Llama-3-8B-Instruct`:
 
 * **Prefill Node:** 1x NVIDIA A100-SXM4-40GB ($0.4889/hr, 312 TFLOPS FP16, 1,555 GB/s HBM2)
 * **Decode Node:** 1x NVIDIA RTX 3090-24GB ($0.1822/hr, 142 TFLOPS FP16, 936 GB/s GDDR6X)
 * **Total Disaggregated Cluster Cost:** **$0.6711/hr**
 
-### Key Findings:
-1. **Architectural Workload-Hardware Match:**
-   * The A100 delivers **2.20x higher compute density** for compute-bound prompt prefill.
-   * The RTX 3090 yields **5,137 GB/s per dollar** vs A100's 3,180 GB/s per dollar (**+61.5% higher memory bandwidth efficiency per dollar**) for memory-bound token decoding.
-2. **In-Flight FP8 Wire Quantization:**
-   * Halves wire payload volume from 128 MB to 64 MB ($C=2$) and 1,024 MB to 512 MB ($C=16$).
-   * Preserves **99.98% cosine fidelity** with negligible perplexity degradation ($\Delta\text{PPL} \le 0.0018$).
-   * Measured GPU kernel overhead (quantization + bipartite GQA re-sharding) is only **10.97 ms** ($C=2$) and **31.64 ms** ($C=16$) on A100 silicon.
-3. **Network Break-Even Boundaries:**
-   * **10 GbE Datacenter Ethernet:** HeteroDisagg saves **+42.69 ms** at $C=2$ and **+397.65 ms** at $C=16$ net latency, enabling commodity Ethernet disaggregation without InfiniBand.
-   * **WAN / Edge Deployments (100 Mbps):** Wire savings exceed **5.3 seconds** ($2.0\times$ faster TTFT).
-   * **Dedicated NVLink (32 GB/s):** When wire transfer is sub-4 ms, quantization overhead dominates (the break-even wire bandwidth boundary is $\approx 6\text{--}25\text{ GB/s}$).
+### Key Takeaways from the Exploratory Phase:
+1. **Architectural Workload-Hardware Match:** The A100 delivered **2.20x higher compute density** for compute-bound prefill, while the RTX 3090 yielded **5,137 GB/s per dollar** (**+61.5% higher memory bandwidth efficiency per dollar**) for memory-bound token decoding.
+2. **In-Flight FP8 Wire Quantization:** Halved wire payload volume (128 MB to 64 MB at $C=2$) while preserving **99.98% cosine fidelity** and passing the strict zero-loss threshold ($\Delta\text{PPL} \le 0.0018$).
+3. **Container Virtualization Reality:** Rented containers across separate chassis on the same provider experienced multi-tenant NAT/bridging bottlenecks (~0.1 MB/s), demonstrating that physical disaggregation requires dedicated L2/L3 networking or tunnel relays, which directly motivated the robust framing and two-phase transport engineered in **Step 4**.
 
-For full empirical traces, socket RTT distributions, raw `iperf3` container bridge results, and analytical projections across fabrics:
-* See [SAME_HOST_BENCHMARKS.md](SAME_HOST_BENCHMARKS.md) for empirical hardware testbed measurements and network virtualization analysis.
-* See [BENCHMARKS.md](BENCHMARKS.md) for formal benchmarking protocols, quality guardrails ($\Delta\text{PPL}$), and full cross-fabric wire latency projections.
+> [!NOTE]
+> For complete historical logs, socket RTT distributions, raw `iperf3` container bridge results, and analytical fabric projections from this exploratory phase, see [archive/SAME_HOST_BENCHMARKS.md](archive/SAME_HOST_BENCHMARKS.md).
 
 ---
 
 ## Repository Structure
 
-* [SAME_HOST_BENCHMARKS.md](SAME_HOST_BENCHMARKS.md): Ground-truth empirical measurements on live A100 + RTX 3090 silicon, container networking reality, and isolated kernel timings.
-* [BENCHMARKS.md](BENCHMARKS.md): Formal validation protocol, statistical standards, quality guardrails, and cross-fabric analytical projections.
-* [ARCHITECTURE.md](ARCHITECTURE.md): Progressive architectural decisions and deep-dive technical specs.
-* [TRADEOFFS.md](TRADEOFFS.md): Explicit record of design trade-offs, rejected alternatives, and rationale.
+* [ARCHITECTURE.md](ARCHITECTURE.md): Progressive architectural decisions, Roofline inflection formulas, and deep-dive technical specs.
+* [TRADEOFFS.md](TRADEOFFS.md): Explicit record of design trade-offs, rejected alternatives, and systems rationale.
+* [BENCHMARKS.md](BENCHMARKS.md): Formal validation protocol, statistical standards, quality guardrails ($\Delta\text{PPL}$), and benchmark progression.
 * [docs/UPSTREAM_RFC.md](docs/UPSTREAM_RFC.md): Formal proposal for vLLM / SGLang communities.
 * [docs/TECHNICAL_REPORT.md](docs/TECHNICAL_REPORT.md): Comprehensive staff-level engineering report.
+* [archive/SAME_HOST_BENCHMARKS.md](archive/SAME_HOST_BENCHMARKS.md): Archived September 2026 exploratory study on Vast.ai Host ID `399360`.
 * [configs/hardware/](configs/hardware/): Reference hardware specifications for modern accelerators.
 * [configs/clusters/](configs/clusters/): Reference heterogeneous cluster inventory profiles.
 * `hetero_prof/`: Phase 1 profiler, hardware detector, and roofline analysis engine.
@@ -257,5 +248,6 @@ For full empirical traces, socket RTT distributions, raw `iperf3` container brid
 * `scripts/`: Benchmark, profiling, and staged hardware validation runners (Steps 0–4).
 * `benchmarks/`: Empirical JSON validation artifacts, sweep traces, and execution logs.
 * `tests/`: Automated unit, integration, and fail-closed milestone acceptance gates.
+
 
 

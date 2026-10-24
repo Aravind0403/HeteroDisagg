@@ -52,7 +52,10 @@ Evaluated using `scripts/eval_perplexity.py` comparing uncompressed FP16 KV cach
 
 ---
 
-## 3. Hardware Testbed & Environment
+## 3. Historical Exploratory Study: Testbed & Environment (v0.1.0 September 2026)
+
+> [!NOTE]
+> Sections 3 through 8 record the initial exploratory measurements captured on Host ID `399360` during the v0.1.0 release (September 2026). For the active production validation progression across physical hardware (Steps 0 through 4B), see **Section 10**.
 
 Benchmarks were captured on live silicon rented via Vast.ai (Datacenter Host ID `399360`, California, US):
 * **Prefill Node (Machine `148097`):** 1x NVIDIA A100-SXM4-40GB (Ampere CC 8.0, 108 SMs, 312.0 TFLOPS FP16, 1,555 GB/s HBM2, PCIe 4.0, AMD EPYC 7K62 24 vCPUs) — **$0.4889 / hr**
@@ -195,4 +198,20 @@ To isolate the physical transport trade-offs independent of model forward passes
   * **Mean Per-Case Regret:** **0.0488%** relative to the projected oracle.
   * **Maximum Single-Case Regret:** **1.147%** (occurring at 128 tokens on 1 Gbps).
   * **Global Latency:** Total policy latency beats both Always-Compress and Never-Compress baselines across the entire sweep grid.
+
+---
+
+## 10. October 2026 Staged Hardware Validation Ladder (Steps 0 – 4B)
+
+To replace synthetic projections with verified end-to-end multi-process execution, the October 2026 validation ladder enforces empirical handoff across physical hardware:
+
+| Milestone | Hardware Testbed | Protocol Focus | Empirical Validation & Findings | Checked-in Artifact |
+|---|---|---|---|---|
+| **Step 0: Local Readiness** | Localhost (CPU) | Exact byte accounting & process cleanup | CPU socket handoff; zero resource/file leaks; fail-closed gates | [`step0_local_readiness.json`](benchmarks/step0_local_readiness.json) |
+| **Step 1: Single-GPU Silicon Smoke** | 1x NVIDIA RTX 4070 (Ada CC 8.9) | Wire codec on silicon | FP8 scale packing & unpacking verified on GPU | [`step1_single_gpu_validation.json`](benchmarks/step1_single_gpu_validation.json) |
+| **Step 2: Two-GPU Same-Host Handoff** | 2x NVIDIA RTX 4070 (`cuda:0` $\to$ `cuda:1`) | Physical multi-GPU process handoff | Null-cache ablation proves cache consumption; FP16 error = 0.0 | [`step2_two_gpu_handoff.json`](benchmarks/step2_two_gpu_handoff.json) |
+| **Step 3: Controlled Transfer Study** | 2x NVIDIA RTX 4070 (`cuda:0` $\to$ `cuda:1`) | Interconnect latency crossover | Loopback: FP16 wins (0 ms regret). <br>500 Mbps: FP8 wins at $S=1024$ (+25.73 ms speedup). | [`step3_controlled_transfer_study.json`](benchmarks/step3_controlled_transfer_study.json) |
+| **Step 4A: Network Protocol & Failure Gates** | Localhost (CPU) | Bounded TCP framing & fail-closed gates | 9/9 automated tests pass; fail-closed on checkpoint/dtype mismatches | [`step4_producer_uncompressed.json`](benchmarks/step4_producer_uncompressed.json) <br> [`step4_consumer_uncompressed.json`](benchmarks/step4_consumer_uncompressed.json) |
+| **Step 4B: Cross-Machine Cloud Handoff** | 1x RTX 3090 (Ampere SM 8.6) $\to$ 1x RTX 4090 (Ada SM 8.9) | Cross-node disaggregated serving | Null-cache diverged; 100% token match; 99.999% cosine similarity; 0 orphaned instances | [`step4b_producer_evidence.json`](benchmarks/step4b_producer_evidence.json) <br> [`step4b_consumer_evidence.json`](benchmarks/step4b_consumer_evidence.json) |
+
 

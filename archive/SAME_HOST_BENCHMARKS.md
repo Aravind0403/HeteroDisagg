@@ -1,6 +1,8 @@
-# Empirical Validation: Heterogeneous Disaggregation (A100 Prefill $\to$ RTX 3090 Decode)
+# [ARCHIVED] Empirical Validation: Heterogeneous Disaggregation (A100 Prefill $\to$ RTX 3090 Decode)
 
-This document records the empirical network baseline, isolated GPU compute benchmarks, live wire transfer measurements, and cross-fabric analytical projections on genuine physical hardware rented under Vast.ai Host ID `399360` (California, US).
+> [!NOTE]
+> **Historical Archive Notice (v0.1.0 Exploratory Study — September 2026):**  
+> This document records early exploratory benchmarking on physical hardware under Host ID `399360` (California, US). It evaluated isolated kernel overheads and container NAT networking bottlenecks before the formal **October 2026 5-stage validation ladder (Steps 0 through 4B)** was established. For current, verified cross-machine disaggregated serving benchmarks across disparate microarchitectures, refer to the [README.md](../README.md).
 
 ---
 
@@ -145,7 +147,7 @@ $$\text{Wire Latency (ms)} = \frac{\text{Measured Payload (MB)}}{\text{Nominal F
 
 ## 6. Artifact & Run Trace Summary
 
-* **Raw JSON Sweep:** [`benchmarks/empirical_decoupled_sweep.json`](benchmarks/empirical_decoupled_sweep.json)
-* **Raw Execution Log:** [`benchmarks/empirical_decoupled_sweep.log`](benchmarks/empirical_decoupled_sweep.log)
-* **Harness Script:** [`scripts/run_decoupled_empirical_benchmark.py`](scripts/run_decoupled_empirical_benchmark.py)
+* **Raw JSON Sweep:** [`benchmarks/empirical_decoupled_sweep.json`](../benchmarks/empirical_decoupled_sweep.json)
+* **Raw Execution Log:** [`benchmarks/empirical_decoupled_sweep.log`](../benchmarks/empirical_decoupled_sweep.log)
+* **Harness Script:** [`scripts/run_decoupled_empirical_benchmark.py`](../scripts/run_decoupled_empirical_benchmark.py)
 * **Demarcation Statement:** All GPU kernel measurements and payload sizes are 100% empirically measured on A100 SXM4 silicon; cross-fabric network timings are mathematical projections based strictly on those empirical payload volumes.
