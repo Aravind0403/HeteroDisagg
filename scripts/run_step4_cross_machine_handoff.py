@@ -70,6 +70,13 @@ from hetero_kv.transport import (
     DEFAULT_TIMEOUT,
     MAGIC_MANIFEST,
     MAGIC_FRAME,
+    MAGIC_ACK_MANIFEST,
+    MAGIC_REJ_MANIFEST,
+    MAGIC_ACK_TRANSFER,
+    MAGIC_VAL_PASSED,
+    MAGIC_VAL_FAILED,
+    send_handshake_msg,
+    recv_handshake_msg,
     MAX_METADATA_BYTES,
     TransportError,
     MismatchedRequestError,
@@ -79,42 +86,11 @@ from hetero_kv.transport import (
     CorruptedFrameError,
 )
 
-# Custom Handshake Framing
-MAGIC_ACK_MANIFEST = b"ACKM"
-MAGIC_REJ_MANIFEST = b"REJM"
-MAGIC_ACK_COMPLETED = b"ACKD"
 
-
-def send_handshake_msg(sock: socket.socket, magic: bytes, payload_dict: Dict[str, Any]) -> None:
-    """Sends a 4-byte magic + 4-byte big-endian length + JSON payload handshake packet."""
-    json_bytes = json.dumps(payload_dict).encode("utf-8")
-    header = magic + len(json_bytes).to_bytes(4, byteorder="big")
-    sock.sendall(header + json_bytes)
-
-
-def recv_handshake_msg(sock: socket.socket, expected_magic: Optional[bytes] = None, timeout: float = DEFAULT_TIMEOUT) -> Tuple[bytes, Dict[str, Any]]:
-    """Receives a 4-byte magic + 4-byte length + JSON payload packet with bounded timeout."""
-    sock.settimeout(timeout)
-    header = sock.recv(8)
-    if len(header) < 8:
-        raise IncompleteTransferError(f"Expected 8-byte handshake header, received {len(header)} bytes")
-    magic = header[:4]
-    if expected_magic is not None and magic != expected_magic:
-        raise CorruptedFrameError(f"Handshake magic mismatch: expected {expected_magic}, got {magic}")
-    length = int.from_bytes(header[4:8], byteorder="big")
-    if length > MAX_METADATA_BYTES:
-        raise CorruptedFrameError(f"Handshake payload length {length} exceeds maximum {MAX_METADATA_BYTES}")
-    
-    received = 0
-    chunks = []
-    while received < length:
-        chunk = sock.recv(min(length - received, 4096))
-        if not chunk:
-            raise IncompleteTransferError(f"Connection closed during handshake body read: got {received}/{length}")
-        chunks.append(chunk)
-        received += len(chunk)
-    payload_data = json.loads(b"".join(chunks).decode("utf-8"))
-    return magic, payload_data
+def torch_dtype_to_str(d: torch.dtype) -> str:
+    """Converts a torch.dtype to standard string ('float32', 'bfloat16', 'float16')."""
+    s = str(d)
+    return s.replace("torch.", "")
 
 
 def get_git_metadata() -> Dict[str, Any]:
@@ -190,7 +166,7 @@ def resolve_torch_dtype(dtype_str: str, device_type: str) -> torch.dtype:
     if dtype_str == "float16":
         return torch.float16 if device_type == "cuda" else torch.float32
     elif dtype_str == "bfloat16":
-        return torch.bfloat16 if device_type == "cuda" else torch.float32
+        return torch.bfloat16
     elif dtype_str == "float32":
         return torch.float32
     raise ValueError(f"Unsupported dtype string: {dtype_str}")
@@ -332,13 +308,29 @@ def run_producer(
 
         click.echo("[PRODUCER] Connected. Sending RequestManifest...")
 
-        # 4. Formulate RequestManifest
+        # 4. Formulate RequestManifest deriving exact dtype from produced cache
         num_layers = causal_model.config.num_hidden_layers
         num_kv_heads = getattr(causal_model.config, "num_key_value_heads", causal_model.config.num_attention_heads)
         head_dim = causal_model.config.hidden_size // causal_model.config.num_attention_heads
 
+        if hasattr(prefill_cache, "layers") and len(prefill_cache.layers) > 0:
+            sample_layer = prefill_cache.layers[0]
+            sample_tensor = getattr(sample_layer, "keys", getattr(sample_layer, "key_states", None))
+        elif hasattr(prefill_cache, "key_cache") and len(prefill_cache.key_cache) > 0:
+            sample_tensor = prefill_cache.key_cache[0]
+        elif isinstance(prefill_cache, (list, tuple)) and len(prefill_cache) > 0:
+            sample_tensor = prefill_cache[0][0]
+        else:
+            sample_tensor = None
+
+        actual_tensor_dtype = (
+            torch_dtype_to_str(sample_tensor.dtype)
+            if sample_tensor is not None
+            else torch_dtype_to_str(causal_model.dtype)
+        )
+
         sent_commit_hash = "corrupted_fake_commit_hash" if inject_checkpoint_mismatch else resolved_commit_hash
-        sent_dtype = "invalid_dtype_99" if inject_dtype_mismatch else ("float16" if torch_device.type == "cuda" else "float32")
+        sent_dtype = "invalid_dtype_99" if inject_dtype_mismatch else actual_tensor_dtype
 
         manifest = RequestManifest(
             request_id=request_id,
@@ -365,7 +357,7 @@ def run_producer(
 
         # 5. Await Consumer Handshake Manifest ACK
         click.echo("[PRODUCER] Awaiting consumer manifest handshake...")
-        magic, ack_data = recv_handshake_msg(client_sock, timeout=timeout)
+        magic, ack_data, _ = recv_handshake_msg(client_sock, timeout=timeout)
         if magic == MAGIC_REJ_MANIFEST:
             raise ManifestValidationError(f"Consumer rejected manifest: {ack_data.get('reason')}")
         if magic != MAGIC_ACK_MANIFEST:
@@ -400,13 +392,14 @@ def run_producer(
                 for p in range(prefill_tp):
                     shard = slice_kv_for_prefill_rank(tensor_hetero, prefill_rank=p, plan=plan)
                     h_slice = plan.prefill_head_slices[p]
+                    shard_dtype_str = torch_dtype_to_str(shard.dtype)
 
                     if enable_fp8:
                         compressed = quantize_kv_block_fp8(shard, block_size_tokens=block_size)
                         is_f8 = compressed.quantized_data.dtype == getattr(torch, "float8_e4m3fn", None)
                         dtype_str = "float8_e4m3fn" if is_f8 else "int8"
-                        quant_bytes = compressed.quantized_data.view(torch.uint8).cpu().numpy().tobytes()
-                        scale_bytes = compressed.scale_factors.cpu().numpy().tobytes()
+                        quant_bytes = compressed.quantized_data.contiguous().view(torch.uint8).cpu().numpy().tobytes()
+                        scale_bytes = compressed.scale_factors.contiguous().view(torch.uint8).cpu().numpy().tobytes()
                         body = quant_bytes + scale_bytes
 
                         meta = FrameMetadata(
@@ -423,12 +416,13 @@ def run_producer(
                             scale_shape=list(compressed.scale_factors.shape),
                             scale_dtype="float32",
                             original_shape=list(compressed.original_shape),
-                            original_dtype="float16" if torch_device.type == "cuda" else "float32",
+                            original_dtype=shard_dtype_str,
                             block_size_tokens=compressed.block_size_tokens,
                             body_bytes=len(body),
                         )
                     else:
-                        body = shard.cpu().numpy().tobytes()
+                        # Raw byte view serialization supports bfloat16, float16, and float32 uniformly
+                        body = shard.contiguous().view(torch.uint8).cpu().numpy().tobytes()
                         meta = FrameMetadata(
                             request_id=manifest.request_id,
                             kv_type=kv_type,
@@ -439,7 +433,7 @@ def run_producer(
                             end_head_idx=h_slice.end_head_idx,
                             is_quantized=False,
                             shape=list(shard.shape),
-                            dtype="float16" if torch_device.type == "cuda" else "float32",
+                            dtype=shard_dtype_str,
                             body_bytes=len(body),
                         )
 
@@ -451,19 +445,22 @@ def run_producer(
                         click.echo("[PRODUCER] Injected truncation: closing socket prematurely!")
                         client_sock.close()
                         report["error"] = "Injected truncation simulated"
+                        report["git_provenance"] = get_git_metadata()
                         _write_json(output, report)
                         sys.exit(1)
 
         t_stream_end = time.perf_counter()
         wire_send_ms = (t_stream_end - t_send_start) * 1000.0
 
-        # 7. Await Final Completion ACK from Consumer
-        click.echo("[PRODUCER] Awaiting consumer completion ACK...")
-        magic_done, done_data = recv_handshake_msg(client_sock, expected_magic=MAGIC_ACK_COMPLETED, timeout=timeout)
+        # 7. Await Consumer Wire Transfer ACK (First phase)
+        click.echo("[PRODUCER] Awaiting consumer wire transfer ACK...")
+        magic_ack, transfer_ack_data, _ = recv_handshake_msg(
+            client_sock, expected_magic=MAGIC_ACK_TRANSFER, timeout=timeout
+        )
         t_ack_recv = time.perf_counter()
-        total_roundtrip_ms = (t_ack_recv - t_send_start) * 1000.0
+        wire_transfer_ack_rtt_ms = (t_ack_recv - t_send_start) * 1000.0
 
-        click.echo(f"[PRODUCER] Transfer completed successfully! Consumer reported: {done_data}")
+        click.echo(f"[PRODUCER] Wire transfer acknowledged in {wire_transfer_ack_rtt_ms:.2f}ms: {transfer_ack_data}")
 
         report["wire_accounting"] = {
             "framing_bytes": total_accounting.framing_bytes,
@@ -474,11 +471,33 @@ def run_producer(
         }
         report["timings_producer_local_ms"].update({
             "wire_send_duration_ms": wire_send_ms,
-            "producer_ack_roundtrip_ms": total_roundtrip_ms,
+            "wire_transfer_ack_rtt_ms": wire_transfer_ack_rtt_ms,
         })
-        report["consumer_completion_ack"] = done_data
-        report["success"] = True
+        report["consumer_transfer_ack"] = transfer_ack_data
 
+        # 8. Await Consumer Correctness Validation Result (Second phase)
+        click.echo("[PRODUCER] Awaiting consumer correctness validation result...")
+        magic_val, val_data, _ = recv_handshake_msg(client_sock, timeout=timeout)
+        t_val_recv = time.perf_counter()
+        total_session_rtt_ms = (t_val_recv - t_send_start) * 1000.0
+
+        report["timings_producer_local_ms"]["total_session_rtt_ms"] = total_session_rtt_ms
+        report["consumer_validation"] = val_data
+
+        if magic_val != MAGIC_VAL_PASSED:
+            click.echo(f"[PRODUCER ERROR] Consumer validation failed: {val_data}", err=True)
+            report["error"] = {
+                "type": "ConsumerValidationError",
+                "message": f"Consumer reported validation failure: {val_data}",
+            }
+            report["success"] = False
+            report["git_provenance"] = get_git_metadata()
+            _write_json(output, report)
+            sys.exit(1)
+
+        click.echo(f"[PRODUCER] Consumer validation PASSED! Details: {val_data}")
+        report["success"] = True
+        report["git_provenance"] = get_git_metadata()
         _write_json(output, report)
         click.echo(f"[PRODUCER] Output exported to {output}")
         sys.exit(0)
@@ -490,6 +509,7 @@ def run_producer(
             "message": str(e),
         }
         report["success"] = False
+        report["git_provenance"] = get_git_metadata()
         _write_json(output, report)
         sys.exit(1)
     finally:
@@ -604,12 +624,14 @@ def run_consumer(
         try:
             if simulate_rejection:
                 raise ManifestValidationError("Simulated rejection triggered via CLI flag")
+            consumer_dtype_str = torch_dtype_to_str(causal_model.dtype)
             validate_manifest_compatibility(
                 manifest=manifest,
                 model_config=causal_model.config,
                 expected_model_id=model,
                 expected_decode_rank=0,
                 expected_checkpoint_commit_hash=consumer_commit_hash,
+                expected_dtype=consumer_dtype_str,
             )
         except Exception as e:
             # Send Rejection Handshake Packet before aborting
@@ -642,12 +664,12 @@ def run_consumer(
         t_wire_recv_end = time.perf_counter()
         wire_recv_duration_ms = (t_wire_recv_end - t_wire_recv_start) * 1000.0
 
-        # Send Completion ACK back to Producer
+        # Send Wire Transfer Received ACK back to Producer (Phase 1)
         send_handshake_msg(
             conn,
-            MAGIC_ACK_COMPLETED,
+            MAGIC_ACK_TRANSFER,
             {
-                "status": "COMPLETED",
+                "status": "TRANSFER_RECEIVED",
                 "received_frames": len(accumulator.received_frames),
                 "total_wire_bytes": accumulator.accounting.total_wire_bytes,
             },
@@ -790,13 +812,15 @@ def run_consumer(
         logit_diff = torch.abs(baseline_logits_tensor.float() - aligned_logits_tensor.float())
         max_abs_logit_error = float(logit_diff.max().item())
         mean_abs_logit_error = float(logit_diff.mean().item())
-        cosine_sim = float(
+        raw_cosine_sim = float(
             torch.nn.functional.cosine_similarity(
                 baseline_logits_tensor.float().flatten(),
                 aligned_logits_tensor.float().flatten(),
                 dim=0,
             ).item()
         )
+        # Clamp reported cosine similarity to [-1.0, 1.0], retaining absolute logit error as primary identity metric
+        cosine_sim = max(-1.0, min(1.0, raw_cosine_sim))
         aligned_top1_match = bool(
             (torch.argmax(baseline_logits_tensor, dim=-1) == torch.argmax(aligned_logits_tensor, dim=-1)).all().item()
         )
@@ -860,6 +884,7 @@ def run_consumer(
             "aligned_comparison": {
                 "max_abs_logit_error": max_abs_logit_error,
                 "mean_abs_logit_error": mean_abs_logit_error,
+                "raw_cosine_similarity": raw_cosine_sim,
                 "cosine_similarity": cosine_sim,
                 "aligned_top1_match": aligned_top1_match,
             },
@@ -876,6 +901,21 @@ def run_consumer(
         }
         report["success"] = correctness_passed
 
+        # Send Correctness Validation Result Handshake to Producer (Phase 2)
+        val_magic = MAGIC_VAL_PASSED if correctness_passed else MAGIC_VAL_FAILED
+        val_status = "PASSED" if correctness_passed else "FAILED"
+        val_payload = {
+            "status": val_status,
+            "discrete_checks": report["discrete_checks"],
+            "max_abs_logit_error": max_abs_logit_error,
+            "cosine_similarity": cosine_sim,
+            "producer_init_match": producer_init_match,
+            "free_tokens_match": free_tokens_match,
+        }
+        send_handshake_msg(conn, val_magic, val_payload)
+
+        # Refresh git provenance right before serializing output
+        report["git_provenance"] = get_git_metadata()
         _write_json(output, report)
         click.echo(f"[CONSUMER] Output exported to {output}")
         if correctness_passed:
@@ -887,11 +927,17 @@ def run_consumer(
 
     except Exception as e:
         click.echo(f"[CONSUMER ERROR] {type(e).__name__}: {e}", err=True)
+        try:
+            if conn:
+                send_handshake_msg(conn, MAGIC_VAL_FAILED, {"status": "FAILED", "error": str(e)})
+        except Exception:
+            pass
         report["error"] = {
             "type": type(e).__name__,
             "message": str(e),
         }
         report["success"] = False
+        report["git_provenance"] = get_git_metadata()
         _write_json(output, report)
         sys.exit(1)
     finally:

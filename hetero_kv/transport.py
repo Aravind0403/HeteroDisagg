@@ -38,6 +38,11 @@ from hetero_kv.quant.fp8_block import FP8BlockPayload, dequantize_kv_block_fp8
 
 MAGIC_MANIFEST = b"HKVM"
 MAGIC_FRAME = b"HKVF"
+MAGIC_ACK_MANIFEST = b"ACKM"
+MAGIC_REJ_MANIFEST = b"REJM"
+MAGIC_ACK_TRANSFER = b"ACKT"
+MAGIC_VAL_PASSED = b"VALP"
+MAGIC_VAL_FAILED = b"VALF"
 
 MAX_METADATA_BYTES = 64 * 1024                # 64 KB max metadata size
 MAX_PAYLOAD_BYTES = 1024 * 1024 * 1024        # 1 GB max single tensor frame size
@@ -188,11 +193,12 @@ def validate_manifest_compatibility(
     expected_model_id: Optional[str] = None,
     expected_decode_rank: Optional[int] = None,
     expected_checkpoint_commit_hash: Optional[str] = None,
+    expected_dtype: Optional[str] = None,
 ) -> None:
     """
     Validates that an incoming RequestManifest matches the receiving consumer's
-    expected model architecture, identity, checkpoint revision, and target decode rank
-    before accepting cache frames.
+    expected model architecture, identity, checkpoint revision, target decode rank,
+    and tensor dtype before accepting cache frames.
     """
     manifest.validate()
 
@@ -217,6 +223,11 @@ def validate_manifest_compatibility(
     if expected_decode_rank is not None and manifest.decode_rank != expected_decode_rank:
         raise ManifestValidationError(
             f"Manifest decode_rank {manifest.decode_rank} does not match consumer expected {expected_decode_rank}"
+        )
+
+    if expected_dtype is not None and manifest.dtype != expected_dtype:
+        raise ManifestValidationError(
+            f"Manifest dtype '{manifest.dtype}' does not match consumer expected dtype '{expected_dtype}'"
         )
 
     config_num_layers = getattr(model_config, "num_hidden_layers", getattr(model_config, "num_layers", None))
@@ -543,6 +554,65 @@ def recv_manifest(sock: socket.socket, timeout: float = DEFAULT_TIMEOUT) -> Tupl
         body_bytes=0,
     )
     return manifest, accounting
+
+
+def send_handshake_msg(sock: socket.socket, magic: bytes, payload_dict: Dict[str, Any]) -> WireAccounting:
+    """Sends a 4-byte magic + 4-byte big-endian length + JSON payload handshake packet."""
+    if len(magic) != 4:
+        raise ValueError(f"Magic must be exactly 4 bytes, got {magic}")
+    json_bytes = json.dumps(payload_dict).encode("utf-8")
+    meta_len = len(json_bytes)
+    if meta_len > MAX_METADATA_BYTES:
+        raise FrameValidationError(f"Handshake JSON exceeds max size: {meta_len} > {MAX_METADATA_BYTES}")
+    header = magic + meta_len.to_bytes(4, byteorder="big")
+    sock.sendall(header + json_bytes)
+    return WireAccounting(
+        framing_bytes=len(header),
+        metadata_bytes=meta_len,
+        body_bytes=0,
+    )
+
+
+def recv_handshake_msg(
+    sock: socket.socket,
+    expected_magic: Optional[bytes] = None,
+    timeout: float = DEFAULT_TIMEOUT,
+) -> Tuple[bytes, Dict[str, Any], WireAccounting]:
+    """
+    Receives a 4-byte magic + 4-byte length + JSON payload packet with bounded exact-length reads
+    and a single absolute deadline for the entire handshake.
+    Handles fragmented TCP headers and slow-drip delivery seamlessly.
+    """
+    deadline = time.monotonic() + timeout
+
+    rem_header = deadline - time.monotonic()
+    if rem_header <= 0:
+        raise TransportTimeoutError("Handshake timed out before header read")
+    header_bytes = recv_exact(sock, 8, timeout=rem_header, max_bytes=8)
+    magic = header_bytes[:4]
+    if expected_magic is not None and magic != expected_magic:
+        raise CorruptedFrameError(f"Handshake magic mismatch: expected {expected_magic}, got {magic}")
+
+    meta_len = int.from_bytes(header_bytes[4:8], byteorder="big")
+    if meta_len <= 0 or meta_len > MAX_METADATA_BYTES:
+        raise FrameValidationError(f"Handshake length {meta_len} out of allowed bounds [1, {MAX_METADATA_BYTES}]")
+
+    rem_body = deadline - time.monotonic()
+    if rem_body <= 0:
+        raise TransportTimeoutError("Handshake timed out before body read")
+    body_bytes = recv_exact(sock, meta_len, timeout=rem_body, max_bytes=MAX_METADATA_BYTES)
+
+    try:
+        payload_data = json.loads(body_bytes.decode("utf-8"))
+    except Exception as e:
+        raise CorruptedFrameError(f"Failed to decode handshake JSON: {e}") from e
+
+    accounting = WireAccounting(
+        framing_bytes=8,
+        metadata_bytes=meta_len,
+        body_bytes=0,
+    )
+    return magic, payload_data, accounting
 
 
 def send_frame(sock: socket.socket, meta: FrameMetadata, body: bytes) -> WireAccounting:
