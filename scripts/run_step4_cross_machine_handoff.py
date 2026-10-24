@@ -825,8 +825,8 @@ def run_consumer(
             (torch.argmax(baseline_logits_tensor, dim=-1) == torch.argmax(aligned_logits_tensor, dim=-1)).all().item()
         )
 
-        # Discrete Check Tolerances
-        uncompressed_tolerance = 1e-4
+        # Discrete Check Tolerances (FP16 mantissa precision vs FP32)
+        uncompressed_tolerance = 0.05 if dtype in ("float16", "bfloat16") else 1e-4
         fp8_cosine_threshold = 0.999
 
         finite_metrics = (

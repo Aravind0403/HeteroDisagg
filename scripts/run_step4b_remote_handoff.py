@@ -389,9 +389,6 @@ def run_remote_step4b(
         if c_result.get("stderr", "").strip():
             print(f"[CONSUMER STDERR]\n{c_result.get('stderr')}")
 
-        if p_rc != 0 or c_result.get("rc") != 0:
-            raise RuntimeError(f"Handoff failed: Producer exit code={p_rc}, Consumer exit code={c_result.get('rc')}")
-
         # 6. Retrieve Evidence Artifacts
         print("\n[6/6] Collecting Remote Evidence Artifacts...")
         artifacts_dir = repo_root / "benchmarks"
@@ -404,13 +401,18 @@ def run_remote_step4b(
         _, p_json_str, _ = run_ssh(p_ssh[0], p_ssh[1], f"cat {producer_remote_out}", timeout=20.0)
         _, c_json_str, _ = run_ssh(c_ssh[0], c_ssh[1], f"cat {consumer_remote_out}", timeout=20.0)
 
-        with open(local_p_json, "w", encoding="utf-8") as f:
-            f.write(p_json_str)
-        with open(local_c_json, "w", encoding="utf-8") as f:
-            f.write(c_json_str)
+        if p_json_str.strip():
+            with open(local_p_json, "w", encoding="utf-8") as f:
+                f.write(p_json_str)
+            print(f"  -> Producer Evidence Saved: {local_p_json}")
 
-        print(f"  -> Producer Evidence Saved: {local_p_json}")
-        print(f"  -> Consumer Evidence Saved: {local_c_json}")
+        if c_json_str.strip():
+            with open(local_c_json, "w", encoding="utf-8") as f:
+                f.write(c_json_str)
+            print(f"  -> Consumer Evidence Saved: {local_c_json}")
+
+        if p_rc != 0 or c_result.get("rc") != 0:
+            raise RuntimeError(f"Handoff failed: Producer exit code={p_rc}, Consumer exit code={c_result.get('rc')}")
 
         p_data = json.loads(p_json_str)
         c_data = json.loads(c_json_str)
