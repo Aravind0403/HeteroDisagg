@@ -117,9 +117,68 @@ hetero-plan generate --cluster l40s_and_3090.json --model llama-3-8b --engine sg
 
 ---
 
-## Empirical Benchmark Highlights (Live Silicon Validation)
+## Staged Hardware Validation Progression (Steps 0 – 3)
 
-Benchmarks were captured across physical Ampere silicon rented via Vast.ai (Datacenter Host ID `399360`, California, US) evaluating `meta-llama/Meta-Llama-3-8B-Instruct` (32 layers, 8 KV heads, prompt 1024, decode 128):
+HeteroDisagg follows a strict 4-stage empirical validation ladder on real physical silicon, moving systematically from single-host readiness to physical multi-GPU handoff and controlled transfer studies:
+
+```text
+[Step 0: Local Readiness] 
+      │ (CPU protocol, fail-closed gates, process/socket lifecycle verification)
+      ▼
+[Step 1: Single-GPU Validation] 
+      │ (NVIDIA Ada/Ampere silicon smoke test, wire codec scaling & reconstruction)
+      ▼
+[Step 2: Two-GPU Same-Host Handoff] 
+      │ (Separate physical GPUs: cuda:0 -> cuda:1, CUDA sync, null-cache ablation)
+      ▼
+[Step 3: Controlled Transfer Study]
+        (Prompt length sweeps: S in [64, 1024], uncompressed FP16 vs FP8 vs Adaptive Policy)
+```
+
+### Milestone Summary & Artifacts
+
+| Stage | Hardware Testbed | Core Question / Focus | Key Empirical Result | Verified Artifact |
+|---|---|---|---|---|
+| **Step 0: Local Readiness** | Localhost (CPU) | Protocol validity & fail-closed gates | CPU end-to-end socket handoff; zero process/resource leakage | [`step0_local_readiness.json`](file:///Users/aravindsundaresan/Development/HeteroDisagg/benchmarks/step0_local_readiness.json) |
+| **Step 1: Single GPU** | 1x NVIDIA RTX 4070 (Ada CC 8.9) | Wire codec correctness on silicon | Scaling, packing, and reconstruction verified without conflating wire codec with FP8 GEMM | [`step1_single_gpu_validation.json`](file:///Users/aravindsundaresan/Development/HeteroDisagg/benchmarks/step1_single_gpu_validation.json) |
+| **Step 2: Two-GPU Handoff** | 2x NVIDIA RTX 4070 (`cuda:0` $\to$ `cuda:1`) | Physical multi-GPU process handoff | Null-cache ablation proves cache consumption; FP16 logit error = 0.0, FP8 cosine sim = 0.9994 | [`step2_two_gpu_handoff.json`](file:///Users/aravindsundaresan/Development/HeteroDisagg/benchmarks/step2_two_gpu_handoff.json) |
+| **Step 3: Controlled Study** | 2x NVIDIA RTX 4070 (`cuda:0` $\to$ `cuda:1`) | Does compression reduce handoff latency, and does policy choose appropriately? | **Loopback:** FP16 wins (Policy 100% optimal). <br>**500 Mbps:** FP8 wins at $S=1024$ (**+25.73 ms speedup**, 1.104x). | [`step3_controlled_transfer_study.json`](file:///Users/aravindsundaresan/Development/HeteroDisagg/benchmarks/step3_controlled_transfer_study.json) |
+
+### Step 3 Empirical Findings: Compression Crossover
+
+The Step 3 controlled transfer study evaluated `meta-llama/Meta-Llama-3-8B-Instruct` and `Qwen/Qwen2.5-0.5B-Instruct` cache transport across prompt sequence lengths $S \in [64, 128, 256, 512, 1024]$ on $2\times$ NVIDIA RTX 4070 GPUs under two interconnect regimes:
+
+#### 1. Unrestricted Localhost TCP Socket (Loopback)
+* **Transport Architecture:** Independent OS processes communicating over `127.0.0.1` TCP socket with host-memory staging.
+* **Result:** Uncompressed FP16 is strictly faster across all sequence lengths. Because loopback transfer is sub-10 ms, the ~60–83 ms CPU/GPU quantization and packing codec overhead cannot be amortized.
+* **Policy Verdict:** `AdaptiveCompressionPolicy` achieved **100% optimal selection**, selecting `uncompressed_fp16` across all sequence lengths and incurring 0 ms regret.
+
+#### 2. Calibrated Bandwidth Link (500 Mbps)
+* **Result:** Wire transmission time scales with raw payload size ($86.0\text{ KB}$ for $S=64$ up to $6.26\text{ MB}$ for $S=1024$).
+* **At $S=64$ and $S=256$:** Codec overhead outweighs small wire savings; uncompressed FP16 remains optimal.
+* **At $S=1024$ (The Crossover Frontier):** FP8 wire compression achieves an end-to-end handoff latency speedup of **$25.73\text{ ms}$** ($247.73\text{ ms}$ vs $273.46\text{ ms}$, **$1.104\times$ speedup**), demonstrating that physical compression delivers net latency savings whenever the interconnect bandwidth-delay product crosses the codec compute threshold.
+
+### Reproducing the Validation Ladder
+
+```bash
+# Step 0: Run local readiness predicates and lifecycle cleanup checks (CPU)
+python scripts/run_local_step0_checks.py --model Qwen/Qwen2.5-0.5B-Instruct
+
+# Step 1: Run single-GPU silicon smoke and wire codec verification
+python scripts/run_step1_single_gpu_validation.py --device cuda:0 --model Qwen/Qwen2.5-0.5B-Instruct
+
+# Step 2: Run two-GPU physical same-host cache handoff with null-cache ablation
+python scripts/run_step2_two_gpu_handoff.py --prefill-device cuda:0 --decode-device cuda:1 --model Qwen/Qwen2.5-0.5B-Instruct
+
+# Step 3: Run controlled transfer study (uncompressed vs FP8 vs adaptive policy)
+python scripts/run_step3_controlled_transfer_study.py --seq-lens 64,128,256,512,1024 --bandwidth-mbps 500
+```
+
+---
+
+## Datacenter Cross-Node Hardware Validation (A100 + RTX 3090)
+
+Benchmarks captured across physical Ampere silicon rented via Vast.ai (Datacenter Host ID `399360`, California, US) evaluating `meta-llama/Meta-Llama-3-8B-Instruct` (32 layers, 8 KV heads, prompt 1024, decode 128):
 
 * **Prefill Node:** 1x NVIDIA A100-SXM4-40GB ($0.4889/hr, 312 TFLOPS FP16, 1,555 GB/s HBM2)
 * **Decode Node:** 1x NVIDIA RTX 3090-24GB ($0.1822/hr, 142 TFLOPS FP16, 936 GB/s GDDR6X)
@@ -157,6 +216,7 @@ For full empirical traces, socket RTT distributions, raw `iperf3` container brid
 * `hetero_prof/`: Phase 1 profiler, hardware detector, and roofline analysis engine.
 * `hetero_kv/`: Phase 2 asymmetric KV re-sharding connector with in-flight FP8 quantization.
 * `hetero_policy/`: Phase 3 hardware-adaptive engine adapter and cluster placement planner.
-* `scripts/`: Benchmark, profiling, and demonstration runners.
-* `benchmarks/`: Raw empirical JSON sweep traces and run logs.
-* `tests/`: Automated unit and integration test suite.
+* `scripts/`: Benchmark, profiling, and staged hardware validation runners (Steps 0–3).
+* `benchmarks/`: Empirical JSON validation artifacts, sweep traces, and execution logs.
+* `tests/`: Automated unit, integration, and fail-closed milestone acceptance gates.
+
