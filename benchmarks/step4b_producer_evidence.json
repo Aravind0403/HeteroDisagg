@@ -1,0 +1,96 @@
+{
+  "role": "producer",
+  "timestamp": "2026-10-24T04:28:04Z",
+  "request_id": "step4-8635380dccdd",
+  "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+  "destination": {
+    "host": "127.0.0.1",
+    "port": 50051
+  },
+  "git_provenance": {
+    "commit_hash": "unknown",
+    "branch": "unknown",
+    "is_dirty": false,
+    "error": "Command '['git', 'rev-parse', 'HEAD']' returned non-zero exit status 128."
+  },
+  "hardware_telemetry": {
+    "os": "Linux",
+    "arch": "x86_64",
+    "python_version": "3.11.10",
+    "torch_version": "2.5.1+cu124",
+    "transformers_version": "4.48.3",
+    "cuda_toolkit_version": "12.4",
+    "cuda_available": true,
+    "cuda_device_count": 1,
+    "device": {
+      "device_str": "cuda:0",
+      "device_type": "cuda",
+      "device_index": 0,
+      "name": "NVIDIA GeForce RTX 3090",
+      "compute_capability": "8.6",
+      "total_memory_gb": 23.56,
+      "multi_processor_count": 82
+    }
+  },
+  "configuration": {
+    "prompt": "Heterogeneous disaggregated inference allows",
+    "device": "cuda:0",
+    "dtype": "float16",
+    "enable_fp8": false,
+    "prefill_tp": 1,
+    "decode_tp": 1,
+    "block_size": 16,
+    "timeout_seconds": 90.0
+  },
+  "success": true,
+  "error": null,
+  "resolved_checkpoint_commit_hash": "7ae557604adf67be50417f59c2c2f167def9a775",
+  "prompt_tokens": [
+    39,
+    1404,
+    48022,
+    18288,
+    93040,
+    44378,
+    6147
+  ],
+  "prompt_token_count": 7,
+  "cached_seq_len": 7,
+  "initial_token_id": 369,
+  "initial_token_str": " for",
+  "timings_producer_local_ms": {
+    "prefill_duration_ms": 289.7999531123787,
+    "wire_send_duration_ms": 1266.4756400045007,
+    "wire_transfer_ack_rtt_ms": 2873.0033559259027,
+    "total_session_rtt_ms": 3284.645098960027
+  },
+  "wire_accounting": {
+    "framing_bytes": 392,
+    "metadata_bytes": 17407,
+    "body_bytes": 86016,
+    "total_wire_bytes": 103815,
+    "frames_sent": 48
+  },
+  "consumer_transfer_ack": {
+    "status": "TRANSFER_RECEIVED",
+    "received_frames": 48,
+    "total_wire_bytes": 103815
+  },
+  "consumer_validation": {
+    "status": "PASSED",
+    "discrete_checks": {
+      "producer_initial_token_matches_consumer": true,
+      "null_cache_negative_control_diverged": true,
+      "metrics_are_finite": true,
+      "uncompressed_tokens_match": true,
+      "uncompressed_logit_error_within_tolerance": true,
+      "fp8_cosine_similarity_within_threshold": null,
+      "fp8_free_running_tokens_match": null,
+      "fp8_aligned_top1_match": null
+    },
+    "max_abs_logit_error": 0.0439453125,
+    "cosine_similarity": 0.9999904036521912,
+    "producer_init_match": true,
+    "free_tokens_match": true
+  }
+}
