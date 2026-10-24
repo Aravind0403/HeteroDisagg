@@ -1,17 +1,17 @@
 {
   "role": "producer",
-  "timestamp": "2026-10-24T03:21:45Z",
-  "request_id": "step4-f4e59ead5af9",
+  "timestamp": "2026-10-24T05:02:15Z",
+  "request_id": "step4-1bb38e216a91",
   "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
   "destination": {
     "host": "127.0.0.1",
-    "port": 50774
+    "port": 51873
   },
   "git_provenance": {
-    "commit_hash": "9dda61c0a0805bfed6e375d76895b3f86d063582",
+    "commit_hash": "96ec6b1fa8c4e317b062373e9b3a683502289a1e",
     "branch": "main",
-    "is_dirty": false,
-    "commit_date": "2026-10-24T08:51:10+05:30"
+    "is_dirty": true,
+    "commit_date": "2026-10-24T09:59:38+05:30"
   },
   "hardware_telemetry": {
     "os": "Darwin",
@@ -57,10 +57,10 @@
   "initial_token_id": 369,
   "initial_token_str": " for",
   "timings_producer_local_ms": {
-    "prefill_duration_ms": 885.6095420196652,
-    "wire_send_duration_ms": 8.14783398527652,
-    "wire_transfer_ack_rtt_ms": 8.519416907802224,
-    "total_session_rtt_ms": 2110.7985839480534
+    "prefill_duration_ms": 566.4142499445006,
+    "wire_send_duration_ms": 9.251249954104424,
+    "wire_transfer_ack_rtt_ms": 9.602832957170904,
+    "total_session_rtt_ms": 2058.0449999542907
   },
   "wire_accounting": {
     "framing_bytes": 392,

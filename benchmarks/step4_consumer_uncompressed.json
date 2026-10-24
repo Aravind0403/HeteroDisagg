@@ -1,16 +1,16 @@
 {
   "role": "consumer",
-  "timestamp": "2026-10-24T03:21:28Z",
+  "timestamp": "2026-10-24T05:02:01Z",
   "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
   "binding": {
     "host": "127.0.0.1",
-    "port": 50768
+    "port": 51867
   },
   "git_provenance": {
-    "commit_hash": "9dda61c0a0805bfed6e375d76895b3f86d063582",
+    "commit_hash": "96ec6b1fa8c4e317b062373e9b3a683502289a1e",
     "branch": "main",
-    "is_dirty": false,
-    "commit_date": "2026-10-24T08:51:10+05:30"
+    "is_dirty": true,
+    "commit_date": "2026-10-24T09:59:38+05:30"
   },
   "hardware_telemetry": {
     "os": "Darwin",
@@ -38,9 +38,9 @@
   "success": true,
   "error": null,
   "resolved_checkpoint_commit_hash": "7ae557604adf67be50417f59c2c2f167def9a775",
-  "request_id": "step4-c849ec738efc",
+  "request_id": "step4-8bb25a0bd921",
   "manifest": {
-    "request_id": "step4-c849ec738efc",
+    "request_id": "step4-8bb25a0bd921",
     "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
     "checkpoint_commit_hash": "7ae557604adf67be50417f59c2c2f167def9a775",
     "num_layers": 24,
@@ -74,14 +74,14 @@
     "frames_received": 48
   },
   "timings_consumer_local_ms": {
-    "wire_receive_duration_ms": 3.9527079788967967,
-    "reconstruction_duration_ms": 1.703290967270732,
-    "first_decode_step_latency_ms": 77.12804200127721,
-    "median_subsequent_latency_ms": 87.4286670004949,
+    "wire_receive_duration_ms": 4.67020901851356,
+    "reconstruction_duration_ms": 2.3039589868858457,
+    "first_decode_step_latency_ms": 69.24091698601842,
+    "median_subsequent_latency_ms": 72.94029195327312,
     "subsequent_latencies_ms": [
-      87.4286670004949,
-      85.69629199337214,
-      110.95970799215138
+      71.83462497778237,
+      74.51545796357095,
+      72.94029195327312
     ]
   },
   "baseline_execution": {

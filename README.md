@@ -117,9 +117,9 @@ hetero-plan generate --cluster l40s_and_3090.json --model llama-3-8b --engine sg
 
 ---
 
-## Staged Hardware Validation Progression (Steps 0 – 3)
+## Staged Hardware Validation Progression (Steps 0 – 4)
 
-HeteroDisagg follows a strict 4-stage empirical validation ladder on real physical silicon, moving systematically from single-host readiness to physical multi-GPU handoff and controlled transfer studies:
+HeteroDisagg follows a strict 5-stage empirical validation ladder on real physical silicon, moving systematically from single-host readiness and physical multi-GPU handoff to controlled transfer studies and full cross-machine networked execution across disparate GPU architectures:
 
 ```text
 [Step 0: Local Readiness] 
@@ -132,17 +132,22 @@ HeteroDisagg follows a strict 4-stage empirical validation ladder on real physic
       │ (Separate physical GPUs: cuda:0 -> cuda:1, CUDA sync, null-cache ablation)
       ▼
 [Step 3: Controlled Transfer Study]
-        (Prompt length sweeps: S in [64, 1024], uncompressed FP16 vs FP8 vs Adaptive Policy)
+      │ (Prompt length sweeps: S in [64, 1024], uncompressed FP16 vs FP8 vs Adaptive Policy)
+      ▼
+[Step 4: Cross-Machine Heterogeneous Cloud Handoff]
+        (Separate physical nodes & IPs: Ampere SM 8.6 RTX 3090 -> Ada Lovelace SM 8.9 RTX 4090)
 ```
 
 ### Milestone Summary & Artifacts
 
 | Stage | Hardware Testbed | Core Question / Focus | Key Empirical Result | Verified Artifact |
 |---|---|---|---|---|
-| **Step 0: Local Readiness** | Localhost (CPU) | Protocol validity & fail-closed gates | CPU end-to-end socket handoff; zero process/resource leakage | [`step0_local_readiness.json`](file:///Users/aravindsundaresan/Development/HeteroDisagg/benchmarks/step0_local_readiness.json) |
-| **Step 1: Single GPU** | 1x NVIDIA RTX 4070 (Ada CC 8.9) | Wire codec correctness on silicon | Scaling, packing, and reconstruction verified without conflating wire codec with FP8 GEMM | [`step1_single_gpu_validation.json`](file:///Users/aravindsundaresan/Development/HeteroDisagg/benchmarks/step1_single_gpu_validation.json) |
-| **Step 2: Two-GPU Handoff** | 2x NVIDIA RTX 4070 (`cuda:0` $\to$ `cuda:1`) | Physical multi-GPU process handoff | Null-cache ablation proves cache consumption; FP16 logit error = 0.0, FP8 cosine sim = 0.9994 | [`step2_two_gpu_handoff.json`](file:///Users/aravindsundaresan/Development/HeteroDisagg/benchmarks/step2_two_gpu_handoff.json) |
-| **Step 3: Controlled Study** | 2x NVIDIA RTX 4070 (`cuda:0` $\to$ `cuda:1`) | Does compression reduce handoff latency, and does policy choose appropriately? | **Loopback:** FP16 wins (Policy 100% optimal). <br>**500 Mbps:** FP8 wins at $S=1024$ (**+25.73 ms speedup**, 1.104x). | [`step3_controlled_transfer_study.json`](file:///Users/aravindsundaresan/Development/HeteroDisagg/benchmarks/step3_controlled_transfer_study.json) |
+| **Step 0: Local Readiness** | Localhost (CPU) | Protocol validity & fail-closed gates | CPU end-to-end socket handoff; zero process/resource leakage | [`step0_local_readiness.json`](benchmarks/step0_local_readiness.json) |
+| **Step 1: Single GPU** | 1x NVIDIA RTX 4070 (Ada CC 8.9) | Wire codec correctness on silicon | Scaling, packing, and reconstruction verified without conflating wire codec with FP8 GEMM | [`step1_single_gpu_validation.json`](benchmarks/step1_single_gpu_validation.json) |
+| **Step 2: Two-GPU Handoff** | 2x NVIDIA RTX 4070 (`cuda:0` $\to$ `cuda:1`) | Physical multi-GPU process handoff | Null-cache ablation proves cache consumption; FP16 logit error = 0.0, FP8 cosine sim = 0.9994 | [`step2_two_gpu_handoff.json`](benchmarks/step2_two_gpu_handoff.json) |
+| **Step 3: Controlled Study** | 2x NVIDIA RTX 4070 (`cuda:0` $\to$ `cuda:1`) | Does compression reduce handoff latency, and does policy choose appropriately? | **Loopback:** FP16 wins (Policy 100% optimal). <br>**500 Mbps:** FP8 wins at $S=1024$ (**+25.73 ms speedup**, 1.104x). | [`step3_controlled_transfer_study.json`](benchmarks/step3_controlled_transfer_study.json) |
+| **Step 4A: Network Protocol & Failure Gates** | Localhost (CPU) | Decoupled endpoints, bounded monotonic TCP framing, two-phase validation ACK sequencing, dynamic dtypes (FP16/BF16/FP32) | 9/9 automated protocol tests pass; zero socket leakage; fail-closed rejection on checkpoint mismatch, truncated frames, server unavailable, and dtype mismatch | [`step4_producer_uncompressed.json`](benchmarks/step4_producer_uncompressed.json) <br> [`step4_consumer_uncompressed.json`](benchmarks/step4_consumer_uncompressed.json) |
+| **Step 4B: Cross-Machine Cloud Handoff** | 1x RTX 3090 (Ampere SM 8.6) $\to$ 1x RTX 4090 (Ada SM 8.9) across independent cloud hosts | Disaggregated cache handoff across disparate GPU microarchitectures and un-synchronized monotonic clocks | Null-cache negative control diverged; **100% free-running token match**; **99.999% cosine similarity**; bounded logit error (0.0439 $\le 0.05$); zero orphaned instances | [`step4b_producer_evidence.json`](benchmarks/step4b_producer_evidence.json) <br> [`step4b_consumer_evidence.json`](benchmarks/step4b_consumer_evidence.json) |
 
 ### Step 3 Empirical Findings: Compression Crossover
 
@@ -158,6 +163,29 @@ The Step 3 controlled transfer study evaluated `meta-llama/Meta-Llama-3-8B-Instr
 * **At $S=64$ and $S=256$:** Codec overhead outweighs small wire savings; uncompressed FP16 remains optimal.
 * **At $S=1024$ (The Crossover Frontier):** FP8 wire compression achieves an end-to-end handoff latency speedup of **$25.73\text{ ms}$** ($247.73\text{ ms}$ vs $273.46\text{ ms}$, **$1.104\times$ speedup**), demonstrating that physical compression delivers net latency savings whenever the interconnect bandwidth-delay product crosses the codec compute threshold.
 
+### Step 4 Empirical Findings: Cross-Node Network Handoff & Heterogeneous Microarchitectures
+
+The Step 4 cross-machine deployment evaluated disaggregated serving across physically disparate cloud instances (NVIDIA RTX 3090 Ampere SM 8.6 prefill node $\to$ NVIDIA RTX 4090 Ada Lovelace SM 8.9 decode node) running `Qwen/Qwen2.5-0.5B-Instruct`:
+
+#### 1. Transport Layer Hardening & Two-Phase Synchronization
+* **Exact-Length Monotonic Framing:** Solved TCP segmentation false timeouts over WAN and tunnel relays by enforcing exact-byte reads (`recv_exact`) under a single absolute monotonic deadline across both header and payload frames.
+* **Two-Phase Handshake Sequencing:** Decoupled physical wire reception (`MAGIC_ACK_TRANSFER` = `b"ACKT"`) from consumer decoding verification (`MAGIC_VAL_PASSED` = `b"VALP"` / `MAGIC_VAL_FAILED` = `b"VALF"`). This ensures network transport RTT is cleanly isolated from local consumer decoding time.
+* **Dynamic Dtype Representation:** Replaced static FP16 wire assumptions with dynamic tensor-derived metadata supporting `float16`, `bfloat16`, and `float32` via raw contiguous byte views (`shard.contiguous().view(torch.uint8).cpu().numpy().tobytes()`), strictly validating consumer dtype compatibility before allocation.
+
+#### 2. Cross-Architecture Numerical Equivalence
+* **Negative Control Divergence:** An empty/null cache baseline generated `" the code/API/API"`, immediately diverging from uninterrupted baseline generation.
+* **Token Identity:** With the transferred cache, the consumer generated `" the use of different"` (`[279, 990, 315, 2155]`), achieving **100% token agreement** with the consumer-local uninterrupted baseline.
+* **Microarchitecture Variance:** Across identical hardware (or CPU $\to$ CPU), uncompressed logit error is exactly `0.0`. Across different physical GPU microarchitectures (Ampere SM 8.6 with 82 SMs vs. Ada Lovelace SM 8.9 with 128 SMs), cuBLAS floating-point accumulation ordering causes a minor numerical delta (`max_abs_logit_error = 0.0439` at logit values $\sim 16$, mean absolute error `0.0052`). The output preserved **99.999% cosine similarity** (`0.999990`) and **100% aligned top-1 token agreement**.
+
+#### 3. Decoupled Local Timing
+Because independent nodes have unsynchronized hardware clocks, cross-machine monotonic timestamps are never subtracted:
+* **Producer Prefill Time (RTX 3090):** `289.80 ms`
+* **Wire Transfer ACK RTT:** `2,873.00 ms` (103,815 wire bytes across 48 frames)
+* **Total Validation Session RTT:** `3,284.65 ms`
+* **Consumer Cache Reconstruction (RTX 4090):** `1.72 ms`
+* **Consumer First Decode Step Latency:** `14.03 ms`
+* **Consumer Subsequent Step Median:** `14.21 ms`
+
 ### Reproducing the Validation Ladder
 
 ```bash
@@ -172,6 +200,16 @@ python scripts/run_step2_two_gpu_handoff.py --prefill-device cuda:0 --decode-dev
 
 # Step 3: Run controlled transfer study (uncompressed vs FP8 vs adaptive policy)
 python scripts/run_step3_controlled_transfer_study.py --seq-lens 64,128,256,512,1024 --bandwidth-mbps 500
+
+# Step 4A: Run automated local protocol and failure-injection test suite (9 tests)
+python scripts/test_step4_cross_machine_local.py
+
+# Step 4A (Manual): Run standalone consumer and producer endpoints locally
+python scripts/run_step4_cross_machine_handoff.py --role consumer --bind-host 127.0.0.1 --bind-port 50051 --device cpu --dtype float32 &
+python scripts/run_step4_cross_machine_handoff.py --role producer --dest-host 127.0.0.1 --dest-port 50051 --device cpu --dtype float32
+
+# Step 4B: Run automated remote cloud execution across heterogeneous GPUs (Vast.ai)
+python scripts/run_step4b_remote_handoff.py
 ```
 
 ---
@@ -198,25 +236,26 @@ Benchmarks captured across physical Ampere silicon rented via Vast.ai (Datacente
    * **Dedicated NVLink (32 GB/s):** When wire transfer is sub-4 ms, quantization overhead dominates (the break-even wire bandwidth boundary is $\approx 6\text{--}25\text{ GB/s}$).
 
 For full empirical traces, socket RTT distributions, raw `iperf3` container bridge results, and analytical projections across fabrics:
-* See [SAME_HOST_BENCHMARKS.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/SAME_HOST_BENCHMARKS.md) for empirical hardware testbed measurements and network virtualization analysis.
-* See [BENCHMARKS.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/BENCHMARKS.md) for formal benchmarking protocols, quality guardrails ($\Delta\text{PPL}$), and full cross-fabric wire latency projections.
+* See [SAME_HOST_BENCHMARKS.md](SAME_HOST_BENCHMARKS.md) for empirical hardware testbed measurements and network virtualization analysis.
+* See [BENCHMARKS.md](BENCHMARKS.md) for formal benchmarking protocols, quality guardrails ($\Delta\text{PPL}$), and full cross-fabric wire latency projections.
 
 ---
 
 ## Repository Structure
 
-* [SAME_HOST_BENCHMARKS.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/SAME_HOST_BENCHMARKS.md): Ground-truth empirical measurements on live A100 + RTX 3090 silicon, container networking reality, and isolated kernel timings.
-* [BENCHMARKS.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/BENCHMARKS.md): Formal validation protocol, statistical standards, quality guardrails, and cross-fabric analytical projections.
-* [ARCHITECTURE.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/ARCHITECTURE.md): Progressive architectural decisions and deep-dive technical specs.
-* [TRADEOFFS.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/TRADEOFFS.md): Explicit record of design trade-offs, rejected alternatives, and rationale.
-* [docs/UPSTREAM_RFC.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/docs/UPSTREAM_RFC.md): Formal proposal for vLLM / SGLang communities.
-* [docs/TECHNICAL_REPORT.md](file:///Users/aravindsundaresan/Development/HeteroDisagg/docs/TECHNICAL_REPORT.md): Comprehensive staff-level engineering report.
-* [configs/hardware/](file:///Users/aravindsundaresan/Development/HeteroDisagg/configs/hardware/): Reference hardware specifications for modern accelerators.
-* [configs/clusters/](file:///Users/aravindsundaresan/Development/HeteroDisagg/configs/clusters/): Reference heterogeneous cluster inventory profiles.
+* [SAME_HOST_BENCHMARKS.md](SAME_HOST_BENCHMARKS.md): Ground-truth empirical measurements on live A100 + RTX 3090 silicon, container networking reality, and isolated kernel timings.
+* [BENCHMARKS.md](BENCHMARKS.md): Formal validation protocol, statistical standards, quality guardrails, and cross-fabric analytical projections.
+* [ARCHITECTURE.md](ARCHITECTURE.md): Progressive architectural decisions and deep-dive technical specs.
+* [TRADEOFFS.md](TRADEOFFS.md): Explicit record of design trade-offs, rejected alternatives, and rationale.
+* [docs/UPSTREAM_RFC.md](docs/UPSTREAM_RFC.md): Formal proposal for vLLM / SGLang communities.
+* [docs/TECHNICAL_REPORT.md](docs/TECHNICAL_REPORT.md): Comprehensive staff-level engineering report.
+* [configs/hardware/](configs/hardware/): Reference hardware specifications for modern accelerators.
+* [configs/clusters/](configs/clusters/): Reference heterogeneous cluster inventory profiles.
 * `hetero_prof/`: Phase 1 profiler, hardware detector, and roofline analysis engine.
 * `hetero_kv/`: Phase 2 asymmetric KV re-sharding connector with in-flight FP8 quantization.
 * `hetero_policy/`: Phase 3 hardware-adaptive engine adapter and cluster placement planner.
-* `scripts/`: Benchmark, profiling, and staged hardware validation runners (Steps 0–3).
+* `scripts/`: Benchmark, profiling, and staged hardware validation runners (Steps 0–4).
 * `benchmarks/`: Empirical JSON validation artifacts, sweep traces, and execution logs.
 * `tests/`: Automated unit, integration, and fail-closed milestone acceptance gates.
+
 

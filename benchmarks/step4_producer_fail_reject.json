@@ -1,17 +1,17 @@
 {
   "role": "producer",
-  "timestamp": "2026-10-24T03:22:32Z",
-  "request_id": "step4-65a1b2485b59",
+  "timestamp": "2026-10-24T05:02:58Z",
+  "request_id": "step4-0dc28a8615c4",
   "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
   "destination": {
     "host": "127.0.0.1",
-    "port": 50795
+    "port": 51894
   },
   "git_provenance": {
-    "commit_hash": "9dda61c0a0805bfed6e375d76895b3f86d063582",
+    "commit_hash": "96ec6b1fa8c4e317b062373e9b3a683502289a1e",
     "branch": "main",
-    "is_dirty": false,
-    "commit_date": "2026-10-24T08:51:10+05:30"
+    "is_dirty": true,
+    "commit_date": "2026-10-24T09:59:38+05:30"
   },
   "hardware_telemetry": {
     "os": "Darwin",
@@ -60,6 +60,6 @@
   "initial_token_id": 369,
   "initial_token_str": " for",
   "timings_producer_local_ms": {
-    "prefill_duration_ms": 586.867457954213
+    "prefill_duration_ms": 608.288542018272
   }
 }

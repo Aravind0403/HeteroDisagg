@@ -145,7 +145,7 @@ $$\text{Wire Latency (ms)} = \frac{\text{Measured Payload (MB)}}{\text{Nominal F
 
 ## 6. Artifact & Run Trace Summary
 
-* **Raw JSON Sweep:** [`benchmarks/empirical_decoupled_sweep.json`](file:///Users/aravindsundaresan/Development/HeteroDisagg/benchmarks/empirical_decoupled_sweep.json)
-* **Raw Execution Log:** [`benchmarks/empirical_decoupled_sweep.log`](file:///Users/aravindsundaresan/Development/HeteroDisagg/benchmarks/empirical_decoupled_sweep.log)
-* **Harness Script:** [`scripts/run_decoupled_empirical_benchmark.py`](file:///Users/aravindsundaresan/Development/HeteroDisagg/scripts/run_decoupled_empirical_benchmark.py)
+* **Raw JSON Sweep:** [`benchmarks/empirical_decoupled_sweep.json`](benchmarks/empirical_decoupled_sweep.json)
+* **Raw Execution Log:** [`benchmarks/empirical_decoupled_sweep.log`](benchmarks/empirical_decoupled_sweep.log)
+* **Harness Script:** [`scripts/run_decoupled_empirical_benchmark.py`](scripts/run_decoupled_empirical_benchmark.py)
 * **Demarcation Statement:** All GPU kernel measurements and payload sizes are 100% empirically measured on A100 SXM4 silicon; cross-fabric network timings are mathematical projections based strictly on those empirical payload volumes.

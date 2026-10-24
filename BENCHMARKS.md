@@ -157,9 +157,9 @@ $$\text{Wire Latency (ms)} = \frac{\text{Payload Volume (MB)}}{\text{Fabric Band
 ## 8. Artifacts & Raw Run Traces
 
 Raw benchmark traces, machine configurations, and JSON outputs are checked into the repository:
-* **Raw JSON Sweep:** [`benchmarks/empirical_decoupled_sweep.json`](file:///Users/aravindsundaresan/Development/HeteroDisagg/benchmarks/empirical_decoupled_sweep.json)
-* **Execution Log:** [`benchmarks/empirical_decoupled_sweep.log`](file:///Users/aravindsundaresan/Development/HeteroDisagg/benchmarks/empirical_decoupled_sweep.log)
-* **Harness Script:** [`scripts/run_decoupled_empirical_benchmark.py`](file:///Users/aravindsundaresan/Development/HeteroDisagg/scripts/run_decoupled_empirical_benchmark.py)
+* **Raw JSON Sweep:** [`benchmarks/empirical_decoupled_sweep.json`](benchmarks/empirical_decoupled_sweep.json)
+* **Execution Log:** [`benchmarks/empirical_decoupled_sweep.log`](benchmarks/empirical_decoupled_sweep.log)
+* **Harness Script:** [`scripts/run_decoupled_empirical_benchmark.py`](scripts/run_decoupled_empirical_benchmark.py)
 
 ---
 
